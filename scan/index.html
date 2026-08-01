@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f1ea">
+  <meta name="description" content="Scan animated JamScan dot streams with a camera.">
+  <title>Scan - JamScan</title>
+  <link rel="stylesheet" href="../assets/css/styles.css">
+  <script src="../assets/js/device.js" defer></script>
+  <script src="../assets/js/core.js" defer></script>
+  <script src="../assets/js/common.js" defer></script>
+  <script src="../assets/js/viewer.js" defer></script>
+  <script src="../assets/js/scan.js" defer></script>
+</head>
+<body data-page="scan">
+  <!-- Main navigation -->
+  <header class="site-header">
+    <a class="brand" href="../" aria-label="JamScan home">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+      <span><strong>JamScan</strong><small>Animated dot sharing</small></span>
+    </a>
+    <button class="menu-button" id="menuButton" type="button" aria-expanded="false" aria-controls="siteNav">Menu</button>
+    <nav class="site-nav" id="siteNav" aria-label="Main navigation">
+      <a href="../">Home</a>
+      <a href="../make/">Make</a>
+      <a class="active" href="./">Scan</a>
+      <a href="../open/">Open</a>
+    </nav>
+    <div class="device-label" data-device-label>Checking device</div>
+  </header>
+
+  <main class="section-wrap page-main">
+    <!-- Page heading -->
+    <section class="page-heading">
+      <p class="kicker">Scan</p>
+      <h1>Scan moving dots</h1>
+      <p>Point the camera at a JamScan stream. You can begin in the middle; the scanner waits for the next start marker before collecting data.</p>
+    </section>
+
+    <section class="workspace-grid scan-grid">
+      <!-- Camera scanner -->
+      <article class="panel-card">
+        <div class="panel-heading">
+          <h2>Camera</h2>
+          <p>Center the other screen inside the square guide.</p>
+        </div>
+
+        <div class="camera-shell">
+          <video id="cameraVideo" playsinline muted></video>
+          <div class="camera-placeholder" id="cameraPlaceholder">Camera is off</div>
+          <div class="scan-guide" aria-hidden="true"></div>
+          <div class="scan-badge" id="scanBadge">Ready to scan</div>
+        </div>
+        <canvas class="hidden" id="sampleCanvas" width="512" height="512"></canvas>
+
+        <div class="button-row">
+          <button class="button primary" id="cameraButton" type="button">Start camera</button>
+          <button class="button" id="switchCameraButton" type="button" disabled>Switch camera</button>
+          <button class="button danger" id="resetScanButton" type="button">Reset scan</button>
+        </div>
+
+        <div class="notice-box">Camera access normally requires HTTPS or localhost. If camera permission is blocked, use the Open page with a .jscan file.</div>
+      </article>
+
+      <!-- Scan progress -->
+      <article class="panel-card">
+        <div class="panel-heading">
+          <h2>Incoming stream</h2>
+          <p id="scanMessage">No frames received yet.</p>
+        </div>
+
+        <div class="progress-track"><div class="progress-bar" id="scanProgress"></div></div>
+        <div class="progress-text"><span id="scanPercent">0%</span><span id="scanFrameCount">0 / 0 frames</span></div>
+
+        <div class="scan-state-row"><span>Scanner state</span><strong id="scanState">Waiting for start</strong></div>
+
+        <div class="metric-grid scan-metrics">
+          <div class="metric"><span>Valid data</span><strong id="validFrames">0</strong></div>
+          <div class="metric"><span>Rejected</span><strong id="badFrames">0</strong></div>
+          <div class="metric"><span>Missed flashes</span><strong id="missedFlashes">0</strong></div>
+          <div class="metric"><span>Still missing</span><strong id="missingFrames">0</strong></div>
+          <div class="metric"><span>Last decode</span><strong id="decodeTime">-</strong></div>
+          <div class="metric"><span>Cycles seen</span><strong id="cycleCount">0</strong></div>
+        </div>
+
+        <div class="sub-panel">
+          <h3>Test a frame image</h3>
+          <p>Select a screenshot of one JamScan frame. A complete package normally requires many different frames.</p>
+          <input id="frameImageInput" type="file" accept="image/*" hidden>
+          <button class="button" id="frameImageButton" type="button">Choose frame image</button>
+        </div>
+
+        <ul class="plain-list">
+          <li>Data seen before a start marker is ignored.</li>
+          <li>Sequence gaps are counted as missed flashes.</li>
+          <li>Missing data is collected during later loops.</li>
+          <li>Damaged frames fail the CRC check.</li>
+          <li>Recovered content stays hidden until the warning is accepted.</li>
+        </ul>
+      </article>
+    </section>
+
+    <!-- Recovered preview -->
+    <section id="scanPreviewHost"></section>
+  </main>
+
+  <!-- Safety warning -->
+  <dialog class="warning-dialog" id="warningDialog">
+    <div class="dialog-heading">
+      <div class="warning-symbol">!</div>
+      <div><h2>Check before opening</h2><p id="warningSubtitle">JamScan content may be unsafe or inappropriate.</p></div>
+    </div>
+    <div class="dialog-body">
+      <div class="content-summary">
+        <div><span>Content type</span><strong id="warningKind">Unknown</strong></div>
+        <div><span>File name</span><strong id="warningName">-</strong></div>
+        <div><span>Size</span><strong id="warningSize">-</strong></div>
+        <div><span>Integrity</span><strong id="warningIntegrity">-</strong></div>
+      </div>
+      <div class="warning-list">
+        <p>It could contain inappropriate or disturbing content, even when the file name looks harmless.</p>
+        <p>Text or media could contain scams, fake offers, deceptive links, or impersonation.</p>
+        <p>Unknown downloads could be malware or unsafe files. Do not run anything you do not trust.</p>
+      </div>
+      <label class="check-row"><input id="warningCheck" type="checkbox"><span>I understand that JamScan does not verify, moderate, or guarantee the safety of this content.</span></label>
+    </div>
+    <div class="dialog-actions">
+      <button class="button" id="warningCancel" type="button">Cancel</button>
+      <button class="button primary" id="warningOpen" type="button" disabled>Continue safely</button>
+    </div>
+  </dialog>
+
+  <!-- Page footer -->
+  <footer class="site-footer section-wrap">
+    <span>JamScan open source project</span>
+    <span><a href="../README.md">README</a> and <a href="../LICENSE">MIT License</a></span>
+  </footer>
+
+  <div class="toast" id="toast" role="status"></div>
+</body>
+</html>
