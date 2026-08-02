@@ -44,14 +44,12 @@
       <article class="panel-card">
         <div class="panel-heading">
           <h2>Camera</h2>
-          <p>Keep the entire white JamScan square visible. The outline is only a guide and no dark mask covers the codes.</p>
+          <p>Keep the complete JamScan display visible. Nothing is drawn over the live camera image.</p>
         </div>
 
         <div class="camera-shell">
           <video id="cameraVideo" playsinline muted></video>
           <div class="camera-placeholder" id="cameraPlaceholder">Camera is off</div>
-          <canvas class="scan-overlay" id="scanOverlay" aria-hidden="true"></canvas>
-          <div class="scan-guide" aria-hidden="true"></div>
         </div>
         <div class="scan-badge" id="scanBadge">Ready to scan</div>
         <canvas class="hidden" id="sampleCanvas" width="640" height="480"></canvas>
@@ -79,7 +77,7 @@
 
         <div class="metric-grid scan-metrics">
           <div class="metric"><span>Codes collected</span><strong id="validFrames">0</strong></div>
-          <div class="metric"><span>Rejected</span><strong id="badFrames">0</strong></div>
+          <div class="metric"><span>Confirmed damage</span><strong id="badFrames">0</strong></div>
           <div class="metric"><span>Missed flashes</span><strong id="missedFlashes">0</strong></div>
           <div class="metric"><span>Still missing</span><strong id="missingFrames">0</strong></div>
           <div class="metric"><span>Last decode</span><strong id="decodeTime">-</strong></div>

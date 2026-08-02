@@ -23,7 +23,8 @@
     complete: false,
     codesLast: 0,
     sequenceHoles: new Set(),
-    largeGapCount: 0
+    largeGapCount: 0,
+    lastRejectTime: 0
   };
 
   const core = window.JamScanCore;
@@ -211,66 +212,50 @@
   function drawCameraImage() {
     const video = element("cameraVideo");
     const canvas = element("sampleCanvas");
-    const context = canvas.getContext("2d", { alpha: false });
 
     if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false;
 
-    const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-    const drawWidth = video.videoWidth * scale;
-    const drawHeight = video.videoHeight * scale;
-    const drawX = (canvas.width - drawWidth) / 2;
-    const drawY = (canvas.height - drawHeight) / 2;
+    const maximumSide = 960;
+    const scale = Math.min(1, maximumSide / Math.max(video.videoWidth, video.videoHeight));
+    const width = Math.max(1, Math.round(video.videoWidth * scale));
+    const height = Math.max(1, Math.round(video.videoHeight * scale));
 
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(video, drawX, drawY, drawWidth, drawHeight);
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+      state.lockCorners = [];
+    }
+
+    const context = canvas.getContext("2d", { alpha: false });
+    context.drawImage(video, 0, 0, width, height);
     return true;
   }
 
-  // Code outlines
-  function drawLocks(frames) {
-    const overlay = element("scanOverlay");
-    const shell = overlay.parentElement;
-    const ratio = Math.max(1, window.devicePixelRatio || 1);
-    const width = Math.max(1, Math.round(shell.clientWidth * ratio));
-    const height = Math.max(1, Math.round(shell.clientHeight * ratio));
+  // Match preview to the real camera shape
+  function updateCameraAspect() {
+    const video = element("cameraVideo");
+    const shell = video.parentElement;
+    if (!video.videoWidth || !video.videoHeight) return;
+    shell.style.setProperty("--camera-ratio", `${video.videoWidth} / ${video.videoHeight}`);
+  }
 
-    if (overlay.width !== width || overlay.height !== height) {
-      overlay.width = width;
-      overlay.height = height;
-    }
-
-    const context = overlay.getContext("2d");
-    context.clearRect(0, 0, width, height);
-    if (!frames || !frames.length) return;
-
-    for (const frame of frames) {
-      if (!frame.corners) continue;
-      const scaleX = width / frame.sourceWidth;
-      const scaleY = height / frame.sourceHeight;
-      context.strokeStyle = "#f5b942";
-      context.lineWidth = Math.max(3, ratio * 2);
-      context.beginPath();
-
-      frame.corners.forEach((point, index) => {
-        const x = point.x * scaleX;
-        const y = point.y * scaleY;
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-
-      context.closePath();
-      context.stroke();
-    }
-
+  // Code outlines are disabled so nothing covers the camera preview.
+  function drawLocks() {
     state.lastLockTime = performance.now();
   }
 
-  // Clear old outlines
+  // No preview overlay is used.
   function clearOldLocks() {
-    if (performance.now() - state.lastLockTime < 250) return;
-    const overlay = element("scanOverlay");
-    overlay.getContext("2d").clearRect(0, 0, overlay.width, overlay.height);
+    return;
+  }
+
+  // Count only confirmed damage after a stream has been found.
+  function countConfirmedReject() {
+    const now = performance.now();
+    if (!state.session && !state.lockCorners.length) return;
+    if (now - state.lastRejectTime < 750) return;
+    state.lastRejectTime = now;
+    state.rejected += 1;
   }
 
   // Scan camera frame
@@ -300,8 +285,7 @@
       clearOldLocks();
 
       if (["CRC mismatch", "Header CRC mismatch", "Frame damaged"].includes(error.message)) {
-        state.rejected += 1;
-        element("scanBadge").textContent = "Damaged code skipped";
+        element("scanBadge").textContent = state.session ? "Waiting for a clean repeat" : "Searching for a clean code";
       } else if (error.message === "Low contrast") {
         element("scanBadge").textContent = "Increase screen brightness";
       } else if (error.message === "Code not found") {
@@ -435,6 +419,7 @@
 
     element("cameraVideo").srcObject = state.stream;
     await element("cameraVideo").play();
+    updateCameraAspect();
 
     element("cameraPlaceholder").classList.add("hidden");
     element("cameraButton").textContent = "Stop camera";
@@ -454,6 +439,7 @@
     state.cameraRate = 0;
 
     element("cameraVideo").srcObject = null;
+    element("cameraVideo").parentElement.style.removeProperty("--camera-ratio");
     element("cameraPlaceholder").classList.remove("hidden");
     element("cameraButton").textContent = "Start camera";
     element("scanBadge").textContent = "Ready to scan";
@@ -474,6 +460,7 @@
     state.codesLast = 0;
     state.sequenceHoles.clear();
     state.largeGapCount = 0;
+    state.lastRejectTime = 0;
     element("scanPreviewHost").innerHTML = "";
     updateScanUI();
     element("scanBadge").textContent = state.stream ? "Find the JamScan codes" : "Ready to scan";
@@ -485,16 +472,12 @@
   async function readFrameImage(file) {
     const bitmap = await createImageBitmap(file);
     const canvas = element("sampleCanvas");
+    const maximumSide = 1280;
+    const scale = Math.min(1, maximumSide / Math.max(bitmap.width, bitmap.height));
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     const context = canvas.getContext("2d", { alpha: false });
-    const scale = Math.min(canvas.width / bitmap.width, canvas.height / bitmap.height);
-    const drawWidth = bitmap.width * scale;
-    const drawHeight = bitmap.height * scale;
-    const drawX = (canvas.width - drawWidth) / 2;
-    const drawY = (canvas.height - drawHeight) / 2;
-
-    context.fillStyle = "#eeeeee";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(bitmap, drawX, drawY, drawWidth, drawHeight);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
 
     const started = performance.now();
@@ -554,6 +537,8 @@
     });
 
     updateScanUI();
+    window.addEventListener("resize", updateCameraAspect);
+    window.addEventListener("orientationchange", updateCameraAspect);
     window.addEventListener("beforeunload", stopCamera);
   }
 

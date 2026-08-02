@@ -1447,3 +1447,65 @@ body.device-mobile textarea {
     width: 74%;
   }
 }
+
+
+/* Camera preview without bars or overlays */
+.camera-shell {
+  --camera-ratio: 4 / 3;
+  aspect-ratio: var(--camera-ratio);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+#cameraVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  background: #ffffff;
+}
+
+.scan-guide,
+.scan-overlay {
+  display: none !important;
+}
+
+/* The stream area stays white so no dark frame can cover locator margins. */
+.canvas-shell {
+  padding: 0;
+  overflow: visible;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+#streamCanvas {
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.canvas-shell:fullscreen,
+.canvas-shell:fullscreen #streamCanvas {
+  background: #ffffff;
+}
+
+@media (max-width: 700px) {
+  .camera-shell {
+    width: 100%;
+    max-height: none;
+  }
+
+  .canvas-shell {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  #streamCanvas {
+    border-radius: 0;
+  }
+}

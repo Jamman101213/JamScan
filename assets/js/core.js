@@ -482,20 +482,26 @@
     const count = Math.max(1, list.length);
     const columns = count === 1 ? 1 : 2;
     const rows = count <= 2 ? 1 : 2;
-    const gap = Math.max(10, Math.round(Math.min(canvas.width, canvas.height) * 0.018));
-    const cellWidth = (canvas.width - gap * (columns + 1)) / columns;
-    const cellHeight = (canvas.height - gap * (rows + 1)) / rows;
+    const shortSide = Math.min(canvas.width, canvas.height);
+    const outerMargin = Math.max(16, Math.round(shortSide * 0.025));
+    const gap = Math.max(18, Math.round(shortSide * 0.025));
+    const usableWidth = canvas.width - outerMargin * 2 - gap * (columns - 1);
+    const usableHeight = canvas.height - outerMargin * 2 - gap * (rows - 1);
+    const cellWidth = usableWidth / columns;
+    const cellHeight = usableHeight / rows;
     const side = Math.floor(Math.min(cellWidth, cellHeight));
 
     context.imageSmoothingEnabled = false;
-    context.fillStyle = "#e9e7e1";
+    context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
 
     for (let index = 0; index < list.length; index += 1) {
       const column = index % columns;
       const row = Math.floor(index / columns);
-      const left = Math.round(gap + column * (cellWidth + gap) + (cellWidth - side) / 2);
-      const top = Math.round(gap + row * (cellHeight + gap) + (cellHeight - side) / 2);
+      const cellLeft = outerMargin + column * (cellWidth + gap);
+      const cellTop = outerMargin + row * (cellHeight + gap);
+      const left = Math.round(cellLeft + (cellWidth - side) / 2);
+      const top = Math.round(cellTop + (cellHeight - side) / 2);
       drawFrame(context, list[index], left, top, side, side);
     }
   }

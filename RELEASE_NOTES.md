@@ -1,3 +1,13 @@
+# Mobile camera no-bars update
+
+- Removed every visual overlay from the live camera preview.
+- Matched the preview and decoder canvas to the camera's real aspect ratio.
+- Removed fixed 4:3 letterboxing and black preview bars.
+- Changed the sender frame and canvas container to a clear white outer margin.
+- Increased spacing around the 2 by 2 code layout.
+- Stopped counting blurry search frames as rejected codes.
+- Added a test that confirms the complete outer edge of a four-code display is white.
+
 # JamScan mobile scanner layout fix
 
 - Removed the dark camera mask that covered the outer parts of four-code streams.

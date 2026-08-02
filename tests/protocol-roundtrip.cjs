@@ -131,6 +131,19 @@ function createTestStream(packageBytes, streamId) {
   const multiSource = new TestCanvas(960, 960);
   core.renderFrameGrid(multiSource, multiFrames);
 
+  const edgePoints = [
+    0,
+    multiSource.width - 1,
+    (multiSource.height - 1) * multiSource.width,
+    multiSource.width * multiSource.height - 1,
+    Math.floor(multiSource.width / 2),
+    (multiSource.height - 1) * multiSource.width + Math.floor(multiSource.width / 2)
+  ];
+  if (edgePoints.some(index => multiSource.pixels[index] !== 255)) {
+    throw new Error("Multi-code display edge is not fully white");
+  }
+  console.log("PASS multi-code display has a clear white outer margin");
+
   for (const angle of [0, 3, -3]) {
     const multiCamera = new TestCanvas(640, 480, 216);
     pasteRotated(multiSource, multiCamera, 320, 240, 430, angle);
