@@ -1,8 +1,8 @@
 // Adapted from Decimen Optical Transfer under the MIT License.
 
-export const HEADER_LEN = 20;
+export const HEADER_LEN = 21;
 const MAGIC0 = 0x4a;
-const MAGIC1 = 0x32;
+const MAGIC1 = 0x33;
 
 export function packFrame(header, block) {
   const out = new Uint8Array(HEADER_LEN + block.length);
@@ -15,6 +15,7 @@ export function packFrame(header, block) {
   view.setUint16(10, header.blockLen, true);
   view.setUint32(12, header.totalLen, true);
   view.setUint32(16, header.payloadFnv, true);
+  view.setUint8(20, normalizeChannels(header.channels));
   out.set(block, HEADER_LEN);
   return out;
 }
@@ -30,11 +31,16 @@ export function parseFrame(bytes) {
     blockLen: view.getUint16(10, true),
     totalLen: view.getUint32(12, true),
     payloadFnv: view.getUint32(16, true),
+    channels: normalizeChannels(view.getUint8(20)),
   };
   if (!header.k || !header.blockLen || !header.totalLen) return null;
   if (header.k > 65535 || header.blockLen > 4096 || header.totalLen > 70 * 1024 * 1024) return null;
   if (bytes.length !== HEADER_LEN + header.blockLen) return null;
   return { header, block: bytes.subarray(HEADER_LEN) };
+}
+
+function normalizeChannels(value) {
+  return value === 2 || value === 4 ? value : 1;
 }
 
 export function fnv1a(bytes) {

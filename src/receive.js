@@ -20,6 +20,7 @@ let frameId = 0;
 let decoder = null;
 let streamKey = "";
 let streamChecksum = 0;
+let streamChannels = 1;
 let startedAt = 0;
 let completed = false;
 let statsTimer = null;
@@ -45,6 +46,8 @@ async function startCamera() {
   }
   stopCamera();
   completed = false;
+  captureTimes.length = 0;
+  decodeTimes.length = 0;
   resultHost.innerHTML = "";
   progress.style.width = "0%";
   decoder = null;
@@ -81,7 +84,7 @@ async function startCamera() {
   if (workers.length !== desiredWorkers) buildWorkers(desiredWorkers);
   const settings = stream.getVideoTracks()[0]?.getSettings();
   document.getElementById("metric-camera").textContent = `${settings?.width || "?"}x${settings?.height || "?"} @ ${Math.round(settings?.frameRate || 0)}`;
-  setStatus("Searching for a JamScan QR stream...");
+  setStatus("Searching for Standard, Double, or Quad JamScan QR packets...");
   captureGeneration++;
   scheduleFrame(captureGeneration);
   clearInterval(statsTimer);
@@ -120,9 +123,11 @@ function buildWorkers(count) {
       if (event.data.id === -1) return;
       busy[slot] = false;
       if (!stream || event.data.generation !== captureGeneration) return;
-      if (event.data.bytes) {
+      const codes = Array.isArray(event.data.codes) ? event.data.codes : [];
+      for (const buffer of codes) {
         decodeTimes.push(performance.now());
-        onDecoded(new Uint8Array(event.data.bytes));
+        onDecoded(new Uint8Array(buffer));
+        if (completed) break;
       }
     };
     workers.push(worker);
@@ -164,14 +169,16 @@ function onDecoded(bytes) {
   const parsed = parseFrame(bytes);
   if (!parsed) return;
   const { header, block } = parsed;
-  const key = `${header.sessionId}:${header.k}:${header.blockLen}:${header.totalLen}:${header.payloadFnv}`;
+  const key = `${header.sessionId}:${header.k}:${header.blockLen}:${header.totalLen}:${header.payloadFnv}:${header.channels}`;
   if (!decoder || key !== streamKey) {
     decoder = new LTDecoder(header.k, header.blockLen, header.sessionId, header.totalLen);
     streamKey = key;
     streamChecksum = header.payloadFnv;
+    streamChannels = header.channels;
+    document.getElementById("metric-channels").textContent = `${streamChannels} QR${streamChannels === 1 ? "" : "s"}`;
     startedAt = performance.now();
     progress.style.width = "0%";
-    setStatus(`Locked onto a ${formatBytes(header.totalLen)} stream. Keep the phone steady.`, "good");
+    setStatus(`Locked onto a ${formatBytes(header.totalLen)} ${streamChannels}-QR stream. Keep the complete sender display visible.`, "good");
   }
   decoder.addFrame(header.seq, block);
   const ratio = Math.min(0.99, decoder.framesNew / (decoder.k * overhead));

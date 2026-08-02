@@ -20,15 +20,15 @@
   <main class="page">
     <section class="card camera-card">
       <h1 style="font-size:clamp(2.4rem,7vw,5rem)">Receive</h1>
-      <p class="muted">Start the rear camera and point it at the complete QR. There are no scanner bars or overlays. Blurry images are dropped silently.</p>
+      <p class="muted">Start the rear camera and keep the complete sender display visible. The receiver automatically reads one, two, or four QR codes from each camera image.</p>
       <details>
         <summary>Camera settings</summary>
         <div class="layout" style="grid-template-columns:1fr 1fr;margin-top:12px">
           <div class="field">
             <label for="capture-width">Capture width</label>
             <select id="capture-width">
-              <option value="1280" selected>1280</option>
-              <option value="1920">1920</option>
+              <option value="1280">1280</option>
+              <option value="1920" selected>1920</option>
               <option value="2560">2560</option>
             </select>
           </div>
@@ -61,15 +61,16 @@
       <div class="progress-track"><div id="receive-progress" class="progress-bar"></div></div>
       <div class="metrics">
         <div class="metric"><span>Camera</span><strong id="metric-camera">-</strong></div>
+        <div class="metric"><span>Sender mode</span><strong id="metric-channels">-</strong></div>
         <div class="metric"><span>Capture FPS</span><strong id="metric-capture">0</strong></div>
-        <div class="metric"><span>Decoded FPS</span><strong id="metric-decode">0</strong></div>
+        <div class="metric"><span>Decoded QR/s</span><strong id="metric-decode">0</strong></div>
         <div class="metric"><span>Valid frames</span><strong id="metric-valid">0</strong></div>
         <div class="metric"><span>Duplicates</span><strong id="metric-duplicates">0</strong></div>
         <div class="metric"><span>Estimated rate</span><strong id="metric-rate">0 KB/s</strong></div>
         <div class="metric"><span>Payload</span><strong id="metric-payload">-</strong></div>
         <div class="metric"><span>Elapsed</span><strong id="metric-elapsed">0 s</strong></div>
       </div>
-      <div class="warning">The receiver accepts only fully decoded QR frames with a valid JamScan header. Camera images that fail QR decoding are not counted as rejected packets.</div>
+      <div class="warning">The receiver accepts up to four valid JamScan QR packets from each camera image. Blurry images and unrelated QR codes are ignored instead of counted as rejections.</div>
       <div id="receive-result" class="preview"></div>
     </section>
   </main>

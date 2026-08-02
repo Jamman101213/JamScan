@@ -3,14 +3,16 @@ import { LTEncoder } from "./shared/fountain.js";
 import { HEADER_LEN, fnv1a, packFrame } from "./shared/protocol.js";
 import { buildPackage, formatBytes, safeName } from "./shared/package.js";
 import { chooseTransferPlan } from "./shared/transfer-plan.js";
+import { expectedDisplayFrames, getChannelMode, makeSequenceBatch } from "./shared/channels.js";
 import { downloadBytes } from "./shared/viewer.js";
 
 const overhead = 1.18;
-const lookahead = 3;
+const lookahead = 2;
 const canvas = document.getElementById("qr-canvas");
 const context = canvas.getContext("2d", { alpha: false });
 let mode = "file";
 let profileName = "reliable";
+let channelModeName = "standard";
 let packageBytes = null;
 let metadata = null;
 let streamState = null;
@@ -31,6 +33,10 @@ function setStatus(message, style = "") {
 }
 
 function clearCanvas(message) {
+  canvas.width = 900;
+  canvas.height = 900;
+  canvas.style.width = "";
+  canvas.style.height = "";
   context.fillStyle = "white";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = "#171714";
@@ -54,6 +60,15 @@ document.querySelectorAll(".profile-button").forEach((button) => {
   button.addEventListener("click", () => {
     profileName = button.dataset.profile;
     document.querySelectorAll(".profile-button").forEach((item) => item.classList.toggle("active", item === button));
+    if (packageBytes) updateEstimate();
+    if (streamState) startStream();
+  });
+});
+
+document.querySelectorAll(".channel-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    channelModeName = button.dataset.channels;
+    document.querySelectorAll(".channel-button").forEach((item) => item.classList.toggle("active", item === button));
     if (packageBytes) updateEstimate();
     if (streamState) startStream();
   });
@@ -101,17 +116,21 @@ function usePackage(built) {
 
 function updateEstimate() {
   const plan = chooseTransferPlan(packageBytes.length, profileName);
+  const selected = getChannelMode(channelModeName);
+  const channels = plan.staticQr ? 1 : selected.count;
   const k = Math.ceil(packageBytes.length / plan.blockLen);
-  const expectedFrames = k === 1 ? 1 : Math.ceil(k * overhead);
-  const seconds = expectedFrames / plan.fps;
+  const displays = plan.staticQr ? 1 : expectedDisplayFrames(k, overhead, channels);
+  const seconds = displays / plan.fps;
   document.getElementById("send-size").textContent = formatBytes(packageBytes.length);
   document.getElementById("send-time").textContent = plan.staticQr ? "One valid scan" : formatTime(seconds);
   document.getElementById("send-blocks").textContent = String(k);
-  document.getElementById("send-frame-size").textContent = `${plan.blockLen + HEADER_LEN} B`;
+  document.getElementById("send-frame-size").textContent = `${plan.blockLen + HEADER_LEN} B each`;
   document.getElementById("send-rate").textContent = plan.staticQr
     ? "Static QR"
-    : `${((plan.blockLen * plan.fps) / 1024).toFixed(1)} KB/s raw`;
-  document.getElementById("send-mode").textContent = plan.label;
+    : `${((plan.blockLen * plan.fps * channels) / 1024).toFixed(1)} KB/s raw`;
+  document.getElementById("send-mode").textContent = plan.staticQr
+    ? plan.label
+    : `${plan.label}, ${selected.name} ${channels}-QR`;
 }
 
 function formatTime(seconds) {
@@ -130,7 +149,7 @@ pauseButton.addEventListener("click", () => {
 stopButton.addEventListener("click", stopStream);
 fullscreenButton.addEventListener("click", async () => {
   document.body.classList.add("fullscreen-stream");
-  if (streamState?.queue.length) sizeVisibleCanvas(streamState.queue[0].canvas.width);
+  if (streamState?.queue.length) sizeVisibleCanvas(streamState.queue[0].canvas.width, streamState.queue[0].canvas.height);
   try {
     await document.documentElement.requestFullscreen?.();
   } catch {
@@ -139,7 +158,7 @@ fullscreenButton.addEventListener("click", async () => {
 });
 document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement) document.body.classList.remove("fullscreen-stream");
-  if (streamState?.queue.length) sizeVisibleCanvas(streamState.queue[0].canvas.width);
+  if (streamState?.queue.length) sizeVisibleCanvas(streamState.queue[0].canvas.width, streamState.queue[0].canvas.height);
 });
 saveButton.addEventListener("click", () => {
   if (!packageBytes || !metadata) return;
@@ -151,6 +170,8 @@ async function startStream() {
   if (!packageBytes) return;
   stopStream();
   const plan = chooseTransferPlan(packageBytes.length, profileName);
+  const selected = getChannelMode(channelModeName);
+  const channels = plan.staticQr ? 1 : selected.count;
   const sessionId = crypto.getRandomValues(new Uint16Array(1))[0] || 1;
   const encoder = new LTEncoder(packageBytes, plan.blockLen, sessionId);
   if (encoder.k > 65535) {
@@ -161,6 +182,7 @@ async function startStream() {
   streamState = {
     generation,
     plan,
+    channels,
     encoder,
     sessionId,
     checksum: fnv1a(packageBytes),
@@ -172,8 +194,8 @@ async function startStream() {
   };
 
   const queueSize = plan.staticQr ? 1 : lookahead;
-  for (let i = 0; i < queueSize; i++) streamState.queue.push(buildQrFrame(streamState));
-  sizeVisibleCanvas(streamState.queue[0].canvas.width);
+  for (let i = 0; i < queueSize; i++) streamState.queue.push(buildDisplayFrame(streamState));
+  sizeVisibleCanvas(streamState.queue[0].canvas.width, streamState.queue[0].canvas.height);
   renderFrame(streamState.queue[0]);
 
   startButton.disabled = true;
@@ -184,7 +206,7 @@ async function startStream() {
   setStatus(
     plan.staticQr
       ? "Static one-QR transfer running. The receiver only needs one successful scan."
-      : `${plan.label} running at ${plan.fps} FPS. Keep the complete QR and white margin visible.`,
+      : `${selected.name} mode is showing ${channels} different QR codes per update at ${plan.fps} updates per second. Keep every code and its white margin visible.`,
     "good",
   );
   requestWakeLock();
@@ -204,26 +226,38 @@ function stopStream() {
   releaseWakeLock();
 }
 
-function buildQrFrame(state) {
-  const seq = state.plan.staticQr ? 0 : state.sequence++;
-  const block = state.encoder.encode(seq);
+function buildDisplayFrame(state) {
+  const sequences = state.plan.staticQr
+    ? [0]
+    : makeSequenceBatch(state.sequence, state.channels);
+  if (!state.plan.staticQr) state.sequence += state.channels;
+  const qrCanvases = sequences.map((sequence, index) => buildQrCanvas(state, sequence, index));
+  return {
+    sequences,
+    canvas: composeQrCanvases(qrCanvases),
+  };
+}
+
+function buildQrCanvas(state, sequence, channelIndex) {
+  const block = state.encoder.encode(sequence);
   const bytes = packFrame({
     sessionId: state.sessionId,
-    seq,
+    seq: sequence,
     k: state.encoder.k,
     blockLen: state.encoder.blockLen,
     totalLen: packageBytes.length,
     payloadFnv: state.checksum,
+    channels: state.channels,
   }, block);
   const qr = QRCode.create([{ data: bytes, mode: "byte" }], {
     errorCorrectionLevel: state.plan.ecc,
     version: state.version,
-    maskPattern: 4,
+    maskPattern: (4 + channelIndex) % 8,
   });
   if (state.version === undefined) state.version = qr.version;
   const offscreen = document.createElement("canvas");
   rasterize(qr, offscreen);
-  return { seq, canvas: offscreen };
+  return offscreen;
 }
 
 function rasterize(qr, target) {
@@ -243,26 +277,60 @@ function rasterize(qr, target) {
   }
 }
 
-function sizeVisibleCanvas(moduleSize) {
+function composeQrCanvases(items) {
+  if (items.length === 1) return items[0];
+  const tile = items[0].width;
+  const gap = 8;
+  let columns = 2;
+  let rows = Math.ceil(items.length / columns);
+  if (items.length === 2 && window.innerHeight > window.innerWidth) {
+    columns = 1;
+    rows = 2;
+  }
+  const output = document.createElement("canvas");
+  output.width = columns * tile + (columns - 1) * gap;
+  output.height = rows * tile + (rows - 1) * gap;
+  const outputContext = output.getContext("2d", { alpha: false });
+  outputContext.imageSmoothingEnabled = false;
+  outputContext.fillStyle = "white";
+  outputContext.fillRect(0, 0, output.width, output.height);
+  items.forEach((item, index) => {
+    const x = (index % columns) * (tile + gap);
+    const y = Math.floor(index / columns) * (tile + gap);
+    outputContext.drawImage(item, x, y);
+  });
+  return output;
+}
+
+function sizeVisibleCanvas(logicalWidth, logicalHeight) {
   const stage = document.querySelector(".qr-stage");
   const dpr = window.devicePixelRatio || 1;
-  const viewportBudget = document.body.classList.contains("fullscreen-stream")
-    ? Math.min(window.innerWidth, window.innerHeight)
-    : Math.min(stage.clientWidth - 28, window.innerHeight * 0.78);
-  const scale = Math.max(1, Math.floor((viewportBudget * dpr) / moduleSize));
-  canvas.width = moduleSize * scale;
-  canvas.height = moduleSize * scale;
+  const fullscreen = document.body.classList.contains("fullscreen-stream");
+  const budgetWidth = fullscreen ? window.innerWidth : stage.clientWidth - 28;
+  const budgetHeight = fullscreen ? window.innerHeight : window.innerHeight * 0.78;
+  const scale = Math.max(1, Math.floor(Math.min(
+    (budgetWidth * dpr) / logicalWidth,
+    (budgetHeight * dpr) / logicalHeight,
+  )));
+  canvas.width = logicalWidth * scale;
+  canvas.height = logicalHeight * scale;
   canvas.style.width = `${canvas.width / dpr}px`;
   canvas.style.height = `${canvas.height / dpr}px`;
 }
 
 function renderFrame(frame) {
-  if (!canvas.width || Math.round(canvas.width / frame.canvas.width) < 1) sizeVisibleCanvas(frame.canvas.width);
+  const scaleX = canvas.width / frame.canvas.width;
+  const scaleY = canvas.height / frame.canvas.height;
+  if (!canvas.width || scaleX < 1 || scaleY < 1) sizeVisibleCanvas(frame.canvas.width, frame.canvas.height);
   context.imageSmoothingEnabled = false;
   context.fillStyle = "white";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(frame.canvas, 0, 0, canvas.width, canvas.height);
-  document.getElementById("send-sequence").textContent = frame.seq.toLocaleString();
+  const first = frame.sequences[0];
+  const last = frame.sequences[frame.sequences.length - 1];
+  document.getElementById("send-sequence").textContent = first === last
+    ? first.toLocaleString()
+    : `${first.toLocaleString()}-${last.toLocaleString()}`;
 }
 
 function scheduleTick(generation) {
@@ -277,7 +345,7 @@ function tick(generation) {
   if (!streamState || streamState.generation !== generation || streamState.paused || streamState.plan.staticQr) return;
   const frame = streamState.queue.shift();
   renderFrame(frame);
-  streamState.queue.push(buildQrFrame(streamState));
+  streamState.queue.push(buildDisplayFrame(streamState));
   scheduleTick(generation);
 }
 
@@ -296,7 +364,6 @@ function releaseWakeLock() {
 
 window.addEventListener("resize", () => {
   if (!streamState || !streamState.queue.length) return;
-  sizeVisibleCanvas(streamState.queue[0].canvas.width);
+  sizeVisibleCanvas(streamState.queue[0].canvas.width, streamState.queue[0].canvas.height);
   renderFrame(streamState.queue[0]);
 });
-

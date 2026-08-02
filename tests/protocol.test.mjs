@@ -4,6 +4,7 @@ import { LTDecoder, LTEncoder } from "../src/shared/fountain.js";
 import { fnv1a, packFrame, parseFrame } from "../src/shared/protocol.js";
 import { buildPackage, parsePackage } from "../src/shared/package.js";
 import { chooseTransferPlan } from "../src/shared/transfer-plan.js";
+import { expectedDisplayFrames, getChannelMode, makeSequenceBatch } from "../src/shared/channels.js";
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -20,9 +21,10 @@ let sequence = 0;
 let accepted = 0;
 while (!decoder.isComplete && sequence < encoder.k * 5) {
   const block = encoder.encode(sequence);
-  const frame = packFrame({ sessionId, seq: sequence, k: encoder.k, blockLen, totalLen: source.length, payloadFnv: checksum }, block);
+  const frame = packFrame({ sessionId, seq: sequence, k: encoder.k, blockLen, totalLen: source.length, payloadFnv: checksum, channels: 1 }, block);
   const parsed = parseFrame(frame);
   assert(parsed);
+  assert.equal(parsed.header.channels, 1);
   if (sequence % 10 !== 2 && sequence % 10 !== 7 && sequence % 10 !== 9) {
     decoder.addFrame(parsed.header.seq, parsed.block);
     accepted++;
@@ -40,6 +42,27 @@ const directDecoder = new LTDecoder(directEncoder.k, 512, 77, directSource.lengt
 for (let seq = 0; seq < directEncoder.k; seq++) directDecoder.addFrame(seq, directEncoder.encode(seq));
 assert(directDecoder.isComplete, "systematic source frames did not complete in k frames");
 assert.deepEqual(directDecoder.assemble(), directSource);
+
+
+const channelSource = new Uint8Array(70000);
+for (let i = 0; i < channelSource.length; i++) channelSource[i] = (i * 19 + 5) & 255;
+const channelEncoder = new LTEncoder(channelSource, 896, 901);
+const channelDecoder = new LTDecoder(channelEncoder.k, 896, 901, channelSource.length);
+let display = 0;
+while (!channelDecoder.isComplete && display < channelEncoder.k * 2) {
+  const sequences = makeSequenceBatch(display * 4, 4);
+  for (const seq of sequences) {
+    if (seq % 7 !== 3) channelDecoder.addFrame(seq, channelEncoder.encode(seq));
+  }
+  display++;
+}
+assert(channelDecoder.isComplete, "quad-channel transfer did not recover");
+assert.deepEqual(channelDecoder.assemble(), channelSource);
+assert.equal(getChannelMode("standard").count, 1);
+assert.equal(getChannelMode("double").count, 2);
+assert.equal(getChannelMode("quad").count, 4);
+assert.deepEqual(makeSequenceBatch(20, 4), [20, 21, 22, 23]);
+assert.equal(expectedDisplayFrames(100, 1.18, 4), 30);
 
 const packageBuilt = await buildPackage(new TextEncoder().encode("JamScan protocol test"), "test.txt", "text/plain");
 const packageParsed = await parsePackage(packageBuilt.bytes);
@@ -60,6 +83,7 @@ const tinyFrame = packFrame({
   blockLen: tinyPlan.blockLen,
   totalLen: tinyBuilt.bytes.length,
   payloadFnv: fnv1a(tinyBuilt.bytes),
+  channels: 1,
 }, tinyBlock);
 assert(tinyFrame.length < 750, `tiny text frame is still too large: ${tinyFrame.length} bytes`);
 const tinyDecoder = new LTDecoder(1, tinyPlan.blockLen, 123, tinyBuilt.bytes.length);
@@ -69,6 +93,7 @@ assert.deepEqual(tinyDecoder.assemble(), tinyBuilt.bytes);
 
 console.log(`PASS fountain recovery: ${encoder.k} source blocks, ${accepted} accepted frames, ${sequence - accepted} dropped positions`);
 console.log(`PASS systematic transfer: ${directEncoder.k} source blocks completed in ${directEncoder.k} frames`);
+console.log(`PASS quad-channel recovery: ${channelEncoder.k} blocks in ${display} display updates`);
 console.log(`PASS tiny text static QR: package=${tinyBuilt.bytes.length} bytes, frame=${tinyFrame.length} bytes`);
 console.log("PASS frame protocol and checksum");
 console.log("PASS .jscan package and SHA-256");

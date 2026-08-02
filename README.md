@@ -1,40 +1,53 @@
-# JamScan 2.1
+# JamScan 2.2
 
-JamScan transfers files and text from a screen to a camera using QR frames. It
-also supports saving and opening the same content as a `.jscan` file.
+JamScan transfers files and text from a screen to a camera using fountain-coded
+QR packets. It also saves and opens the same content as a `.jscan` file.
 
-## Tiny-message fix
+## QR channel modes
 
-JamScan no longer pads every transfer to a full 1,445-byte QR payload.
+Standard is the default and is the easiest mode for phone cameras. Double and
+Quad place more than one independently useful QR packet on each display update.
+The receiver automatically reads up to four QR codes from one camera image.
 
-- Packages up to 700 bytes use one smaller static QR.
-- Packages up to 4 KB use 512-byte source blocks at 6 FPS.
-- Packages up to 16 KB use 896-byte source blocks at 10 FPS.
-- Larger packages use the selected Reliable, Fast, or Turbo profile.
+| Mode | QR codes per update | Raw target | Use |
+| --- | ---: | ---: | --- |
+| Standard | 1 | 1x | Default and most reliable |
+| Double | 2 | Up to 2x | Larger displays and steady cameras |
+| Quad | 4 | Up to 4x | Sharp 1080p or higher camera view |
 
-A message containing `hi` produces a 254-byte `.jscan` package and a 274-byte
-optical frame in the included test. The receiver needs one successful scan,
-not an hour of animation.
-
-## How the optical transfer works
-
-- Every QR frame contains its own session and file settings.
-- The receiver can begin in the middle of a transfer.
-- Blurry or transition frames are silently dropped.
-- Source blocks are sent directly at the start of each cycle.
-- Repair frames recover blocks missed by the camera.
-- SHA-256 is checked before recovered content is shown.
+Every QR in Double and Quad contains a different fountain sequence. A blurry or
+missed QR does not invalidate the other codes in the same camera image. Tiny
+packages up to 700 bytes still use one static QR because splitting them would
+only make scanning harder.
 
 ## Transfer profiles
 
-The large-file profiles set the maximum QR payload and display rate. JamScan
-may automatically choose a smaller QR and slower display rate for short data.
-
-| Profile | Maximum frame | Maximum display rate | Use |
+| Profile | Maximum frame | Display updates | Use |
 | --- | ---: | ---: | --- |
-| Reliable | 1,465 bytes | 20 FPS | Most phones and monitors |
-| Fast | 2,953 bytes | 24 FPS | Close range and sharp cameras |
-| Turbo | 2,953 bytes | 30 FPS | 60 Hz or faster displays, propped phone |
+| Reliable | 1,465 bytes per QR | 20 per second | Most phones and monitors |
+| Fast | 2,953 bytes per QR | 24 per second | Close range and sharp cameras |
+| Turbo | 2,953 bytes per QR | 30 per second | 60 Hz displays and a steady receiver |
+
+The estimate shown on the Send page includes the selected channel count. For
+example, Fast plus Quad has a theoretical raw target near 277 KB/s before
+fountain overhead and camera losses. Real speed depends on focus, display size,
+refresh timing, exposure, motion, and how many codes the decoder reads from each
+image.
+
+## Small content handling
+
+- Packages up to 700 bytes use one static QR.
+- Packages up to 4 KB use 512-byte blocks at up to 6 updates per second.
+- Packages up to 16 KB use 896-byte blocks at up to 10 updates per second.
+- Larger packages use the selected Reliable, Fast, or Turbo profile.
+
+## Receiver
+
+The receiver uses ZXing-C++ WebAssembly workers and requests up to four QR
+symbols from each camera image. It starts at any point in the stream, ignores
+unreadable camera images, removes duplicate sequence numbers, and reconstructs
+missing blocks with fountain repair packets. A 1920-pixel camera width is the
+default because Double and Quad need more detail than Standard.
 
 ## Run locally
 
@@ -43,8 +56,7 @@ npm install
 npm run dev
 ```
 
-Desktop browsers may use camera access on `localhost`. For phone testing, use
-an HTTPS deployment such as GitHub Pages.
+Camera access on a phone requires an HTTPS deployment.
 
 ## Build
 
@@ -52,44 +64,34 @@ an HTTPS deployment such as GitHub Pages.
 npm run build
 ```
 
-The finished static site is written to `dist/`.
-
 ## Test
 
 ```bash
 npm test
 ```
 
-The tests cover:
-
-- Fountain recovery with dropped positions
-- Direct source-block recovery
-- Tiny static QR planning
-- Frame packing and checksums
-- `.jscan` parsing and SHA-256
-
-Camera performance still requires testing with a real phone and display.
+The tests cover fountain recovery, systematic source frames, four-channel
+sequence batches, tiny static messages, frame checksums, and `.jscan` integrity.
+Real camera performance still needs testing on the target phones and displays.
 
 ## Credit
 
 JamScan adapts ideas and MIT-licensed implementation details from Decimen
-Optical Transfer by BashAlarmist. JamScan keeps the Decimen copyright and
-license notice for adapted portions. See `THIRD_PARTY_NOTICES.md` and
+Optical Transfer by BashAlarmist. See `THIRD_PARTY_NOTICES.md` and
 `licenses/DECIMEN-MIT.txt`.
 
 ## Development note
 
-This JamScan release was created and revised with assistance from OpenAI's
-GPT-5.6 Thinking model, referred to by the project author as "5.6 Sol". Claude
-was not used to generate this release.
+This release was created and revised with assistance from OpenAI's GPT-5.6
+Thinking model, referred to by the project author as "5.6 Sol". Claude was not
+used to generate this release.
 
 ## Safety
 
-Recovered content is not automatically opened. JamScan shows the claimed file
-type, name, size, and integrity result before previewing or downloading it.
-Treat unknown files, links, and media as untrusted.
+Recovered content is not opened automatically. JamScan shows the claimed type,
+name, size, and integrity result before previewing or downloading it.
 
 ## License
 
 JamScan is released under the MIT License. Adapted Decimen portions remain
-covered by Decimen's included MIT notice.
+covered by the included Decimen MIT notice.

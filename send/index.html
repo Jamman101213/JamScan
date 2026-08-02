@@ -51,17 +51,25 @@
             <button class="profile-button" data-profile="turbo" type="button">Turbo<small>2953 bytes per QR, 30 FPS</small></button>
           </div>
         </div>
+        <div class="field">
+          <label>QR channels</label>
+          <div class="channel-grid">
+            <button class="channel-button active" data-channels="standard" type="button">Standard<small>1 QR per update. Most reliable.</small></button>
+            <button class="channel-button" data-channels="double" type="button">Double<small>2 different QRs per update.</small></button>
+            <button class="channel-button" data-channels="quad" type="button">Quad<small>4 different QRs per update. Needs a sharp camera.</small></button>
+          </div>
+        </div>
         <div class="button-row">
           <button id="start-stream" class="button primary" type="button" disabled>Start stream</button>
           <button id="save-jscan" class="button" type="button" disabled>Save .jscan</button>
         </div>
         <div id="send-status" class="status">Choose a file or prepare text.</div>
-        <div class="warning">Tiny text and files automatically use a smaller static QR. Larger content switches to animated fountain frames.</div>
+        <div class="warning">Tiny text automatically uses one static QR. For large files, Standard is easiest to scan; Double and Quad trade code size for higher throughput.</div>
       </section>
 
       <section class="card stream-card">
         <h2>Animated QR stream</h2>
-        <p class="muted">Each QR is complete by itself. The receiver may begin in the middle.</p>
+        <p class="muted">Every QR packet is self-describing. Double and Quad show different packets at the same time.</p>
         <div class="qr-stage">
           <canvas id="qr-canvas" width="900" height="900"></canvas>
         </div>

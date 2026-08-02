@@ -88,7 +88,7 @@ input[type="file"], input[type="text"], select, textarea {
 }
 textarea { min-height: 160px; resize: vertical; }
 .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 16px 0; }
-.segmented button, .profile-button {
+.segmented button, .profile-button, .channel-button {
   border: 1px solid var(--line);
   background: var(--surface-2);
   border-radius: 12px;
@@ -96,10 +96,11 @@ textarea { min-height: 160px; resize: vertical; }
   font-weight: 800;
   cursor: pointer;
 }
-.segmented button.active, .profile-button.active { background: var(--accent); border-color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
-.profile-grid { display: grid; gap: 8px; margin-top: 12px; }
-.profile-button { text-align: left; }
-.profile-button small { display: block; color: #4e493f; font-weight: 550; margin-top: 3px; }
+.segmented button.active, .profile-button.active, .channel-button.active { background: var(--accent); border-color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+.profile-grid, .channel-grid { display: grid; gap: 8px; margin-top: 12px; }
+.channel-grid { grid-template-columns: repeat(3, 1fr); }
+.profile-button, .channel-button { text-align: left; }
+.profile-button small, .channel-button small { display: block; color: #4e493f; font-weight: 550; margin-top: 3px; }
 .button-row { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
 .button {
   border: 1px solid var(--ink);
@@ -118,7 +119,7 @@ textarea { min-height: 160px; resize: vertical; }
 .status.bad { background: #f5dfdd; color: var(--danger); }
 
 .qr-stage { background: white; border: 1px solid var(--line); border-radius: 18px; padding: 14px; width: 100%; }
-#qr-canvas { display: block; max-width: 100%; margin: 0 auto; image-rendering: pixelated; background: white; }
+#qr-canvas { display: block; max-width: 100%; max-height: 78vh; margin: 0 auto; image-rendering: pixelated; background: white; object-fit: contain; }
 .stream-details { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 .metric { background: var(--surface-2); border-radius: 11px; padding: 10px; min-width: 0; }
 .metric span { display: block; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 850; }
@@ -168,6 +169,7 @@ body.fullscreen-stream .stream-details, body.fullscreen-stream .stream-card > h2
   .nav a { padding: 8px; font-size: 0.75rem; }
   h1 { font-size: clamp(3.2rem, 19vw, 5.2rem); }
   .stream-details { grid-template-columns: 1fr 1fr; }
+  .channel-grid { grid-template-columns: 1fr; }
   .summary { grid-template-columns: 1fr; }
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions .button { width: 100%; }
