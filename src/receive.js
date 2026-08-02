@@ -28,8 +28,8 @@ let wakeLock = null;
 const captureTimes = [];
 const decodeTimes = [];
 
-const defaultWorkers = Math.min(6, Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2)));
-document.getElementById("worker-count").value = String([2, 3, 4, 6].reduce((best, value) => Math.abs(value - defaultWorkers) < Math.abs(best - defaultWorkers) ? value : best, 4));
+const defaultWorkers = 2;
+document.getElementById("worker-count").value = String(defaultWorkers);
 
 startButton.addEventListener("click", startCamera);
 stopButton.addEventListener("click", stopCamera);
@@ -60,6 +60,7 @@ async function startCamera() {
     facingMode: { ideal: "environment" },
     width: { ideal: width },
     height: { ideal: Math.round(width * 3 / 4) },
+    focusMode: { ideal: "continuous" },
   };
   try {
     try {
@@ -128,6 +129,13 @@ function buildWorkers(count) {
         decodeTimes.push(performance.now());
         onDecoded(new Uint8Array(buffer));
         if (completed) break;
+      }
+    };
+    worker.onerror = (event) => {
+      busy[slot] = false;
+      console.error("JamScan QR worker error", event.message);
+      if (stream && !completed) {
+        setStatus(`QR decoder error: ${event.message || "worker failed"}. Reload this page and try Standard mode.`, "bad");
       }
     };
     workers.push(worker);

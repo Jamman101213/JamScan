@@ -20,31 +20,31 @@
   <main class="page">
     <section class="card camera-card">
       <h1 style="font-size:clamp(2.4rem,7vw,5rem)">Receive</h1>
-      <p class="muted">Start the rear camera and keep the complete sender display visible. The receiver automatically reads one, two, or four QR codes from each camera image.</p>
+      <p class="muted">Start the rear camera and keep the complete sender display visible. Standard uses the proven full-image scanner. Double and Quad add overlapping crop scans after a valid full-image attempt.</p>
       <details>
         <summary>Camera settings</summary>
         <div class="layout" style="grid-template-columns:1fr 1fr;margin-top:12px">
           <div class="field">
             <label for="capture-width">Capture width</label>
             <select id="capture-width">
-              <option value="1280">1280</option>
-              <option value="1920" selected>1920</option>
+              <option value="1280" selected>1280</option>
+              <option value="1920">1920</option>
               <option value="2560">2560</option>
             </select>
           </div>
           <div class="field">
             <label for="capture-fps">Requested camera FPS</label>
             <select id="capture-fps">
-              <option value="30">30</option>
-              <option value="60" selected>60</option>
+              <option value="30" selected>30</option>
+              <option value="60">60</option>
             </select>
           </div>
           <div class="field">
             <label for="worker-count">Decode workers</label>
             <select id="worker-count">
-              <option value="2">2</option>
+              <option value="2" selected>2</option>
               <option value="3">3</option>
-              <option value="4" selected>4</option>
+              <option value="4">4</option>
               <option value="6">6</option>
             </select>
           </div>
@@ -70,7 +70,7 @@
         <div class="metric"><span>Payload</span><strong id="metric-payload">-</strong></div>
         <div class="metric"><span>Elapsed</span><strong id="metric-elapsed">0 s</strong></div>
       </div>
-      <div class="warning">The receiver accepts up to four valid JamScan QR packets from each camera image. Blurry images and unrelated QR codes are ignored instead of counted as rejections.</div>
+      <div class="warning">Start with Standard mode to verify the camera. Double and Quad are experimental and need the complete sender display to fill most of the camera view. Blurry and unrelated QR images are ignored.</div>
       <div id="receive-result" class="preview"></div>
     </section>
   </main>

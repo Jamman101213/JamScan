@@ -80,6 +80,19 @@ JamScan adapts ideas and MIT-licensed implementation details from Decimen
 Optical Transfer by BashAlarmist. See `THIRD_PARTY_NOTICES.md` and
 `licenses/DECIMEN-MIT.txt`.
 
+
+## Scanner recovery in version 2.2.1
+
+Version 2.2.1 restores the original full-image, one-QR decode path for Standard mode. The worker no longer imports or filters the JamScan protocol before returning decoded bytes. Double and Quad use separate overlapping half and quadrant scans only after the full-image attempt.
+
+Recommended first test:
+
+1. Select Standard and Reliable on the sender.
+2. Use a tiny text message.
+3. Open the receiver with its default 1280, 30 FPS, and two-worker settings.
+4. Fill most of the camera view with the complete QR and its white margin.
+5. After Standard locks, test Double and then Quad.
+
 ## Development note
 
 This release was created and revised with assistance from OpenAI's GPT-5.6
