@@ -2,7 +2,7 @@
 
 ## Decimen Optical Transfer
 
-JamScan 2.0 adapts core optical-transfer techniques and MIT-licensed code from
+JamScan 2.1 adapts core optical-transfer techniques and MIT-licensed code from
 Decimen Optical Transfer by BashAlarmist:
 
 - Luby Transform fountain coding

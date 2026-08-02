@@ -1,10 +1,18 @@
 # Performance notes
 
-JamScan uses standard QR codes because the camera must resolve every QR module.
-Increasing the number of logical cells does not increase real speed once those
-cells become smaller than camera pixels or are blurred by focus and exposure.
+JamScan changes QR density based on package size. This is important because a
+small message should not be placed inside the same dense QR used for a video.
 
-For best results:
+## Automatic modes
+
+| Package size | Block size | Display behavior |
+| --- | ---: | --- |
+| Up to 700 bytes | Exact package size | One static QR |
+| Up to 4 KB | 512 bytes | 6 FPS |
+| Up to 16 KB | 896 bytes | 10 FPS |
+| Larger | Selected profile maximum | 20 to 30 FPS |
+
+## Best results
 
 - Use full-screen sender mode.
 - Set sender brightness high.
@@ -12,9 +20,7 @@ For best results:
 - Prop the receiving phone instead of holding it.
 - Avoid glare and screen reflections.
 - Use Reliable first, then try Fast at closer range.
-- Use Turbo only when the sender is at least 60 Hz and the camera reports a
-  stable high frame rate.
+- Use Turbo only when the sender is at least 60 Hz.
 
-The receiver intentionally does not count failed camera images as rejected
-packets. Only fully decoded and protocol-valid QR frames enter the fountain
-decoder.
+The receiver does not count failed camera images as rejected packets. Only
+fully decoded and protocol-valid QR frames enter the transfer decoder.

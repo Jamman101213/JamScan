@@ -1,30 +1,33 @@
-# JamScan 2.0 release notes
+# JamScan 2.1 release notes
 
-## Scanner replacement
+## Tiny transfer repair
 
-- Removed custom 64, 1024, and 4028 tile mosaics.
-- Replaced them with standard QR version 27 and version 40 frames.
-- Added ZXing-C++ WebAssembly decoding in parallel workers.
-- Added exact-first 60 FPS camera requests with fallbacks.
-- Added `requestVideoFrameCallback` capture.
-- Removed rejection counting for ordinary blurry camera images.
-- Added self-describing frames, so scanning can start mid-transfer.
-- Added fountain recovery, so exact missed frames are not required.
-- Added integer module scaling to prevent browser resize blur.
-- Added a four-module white QR quiet zone.
+- Removed full-block padding for tiny packages.
+- Added a static one-QR mode for packages up to 700 bytes.
+- Added medium-strength QR error correction for static and small modes.
+- Added 512-byte blocks at 6 FPS for packages up to 4 KB.
+- Added 896-byte blocks at 10 FPS for packages up to 16 KB.
+- Kept large-file Reliable, Fast, and Turbo profiles.
+- Changed the estimate to show `One valid scan` for a static transfer.
 
-## File handling
+## Fountain improvements
 
-- Preserved `.jscan` save and open support.
-- Added optional gzip compression.
-- Added SHA-256 verification.
-- Preserved the warning before previewing received content.
+- Source blocks are sent directly at the start of each cycle.
+- Repair frames follow the source blocks.
+- Small transfers can complete in exactly their source-block count when the
+  camera reads each direct frame.
+- Direct source blocks repeat in later cycles when scanning starts late.
 
-## Performance profiles
+## Receiver startup
 
-- Reliable: 1465-byte QR frames at 20 FPS.
-- Fast: 2953-byte QR frames at 24 FPS.
-- Turbo: 2953-byte QR frames at 30 FPS.
+- QR decoder workers warm up when the Receive page loads.
+- Stale worker results from an older camera session are ignored.
+- Ordinary blurry camera images remain silently discarded.
 
-Turbo requires a sharp close-range camera view and a display that can present
-each frame cleanly. The site shows a best-case time before streaming.
+## Test result
+
+The included `hi` test creates:
+
+- 254-byte `.jscan` package
+- 274-byte optical frame
+- One source block

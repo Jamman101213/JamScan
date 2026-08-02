@@ -2,7 +2,7 @@
 
 ## Decimen Optical Transfer
 
-JamScan 2.0 adapts the fountain-code design, self-describing frame protocol,
+JamScan 2.1 adapts the fountain-code design, self-describing frame protocol,
 60 FPS camera negotiation strategy, worker-based ZXing decoder pipeline, and
 animated QR tuning described and implemented by Decimen Optical Transfer.
 

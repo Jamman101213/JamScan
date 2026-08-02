@@ -56,7 +56,7 @@
           <button id="save-jscan" class="button" type="button" disabled>Save .jscan</button>
         </div>
         <div id="send-status" class="status">Choose a file or prepare text.</div>
-        <div class="warning">Two-second transfers are only possible for small files. The estimate updates after the content is prepared.</div>
+        <div class="warning">Tiny text and files automatically use a smaller static QR. Larger content switches to animated fountain frames.</div>
       </section>
 
       <section class="card stream-card">
@@ -73,7 +73,8 @@
         <div class="stream-details">
           <div class="metric"><span>Sequence</span><strong id="send-sequence">-</strong></div>
           <div class="metric"><span>Package</span><strong id="send-size">-</strong></div>
-          <div class="metric"><span>Best case</span><strong id="send-time">-</strong></div>
+          <div class="metric"><span>Transfer mode</span><strong id="send-mode">-</strong></div>
+          <div class="metric"><span>Expected</span><strong id="send-time">-</strong></div>
           <div class="metric"><span>Source blocks</span><strong id="send-blocks">-</strong></div>
           <div class="metric"><span>QR payload</span><strong id="send-frame-size">-</strong></div>
           <div class="metric"><span>Rate target</span><strong id="send-rate">-</strong></div>

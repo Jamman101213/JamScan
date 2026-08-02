@@ -2,13 +2,9 @@ import QRCode from "qrcode";
 import { LTEncoder } from "./shared/fountain.js";
 import { HEADER_LEN, fnv1a, packFrame } from "./shared/protocol.js";
 import { buildPackage, formatBytes, safeName } from "./shared/package.js";
+import { chooseTransferPlan } from "./shared/transfer-plan.js";
 import { downloadBytes } from "./shared/viewer.js";
 
-const profiles = {
-  reliable: { name: "Reliable", frameBytes: 1465, fps: 20, ecc: "L" },
-  fast: { name: "Fast", frameBytes: 2953, fps: 24, ecc: "L" },
-  turbo: { name: "Turbo", frameBytes: 2953, fps: 30, ecc: "L" },
-};
 const overhead = 1.18;
 const lookahead = 3;
 const canvas = document.getElementById("qr-canvas");
@@ -96,30 +92,37 @@ function usePackage(built) {
   metadata = built.metadata;
   startButton.disabled = false;
   saveButton.disabled = false;
-  setStatus(`${metadata.name} is ready. Package size: ${formatBytes(packageBytes.length)}.`, "good");
+  const plan = chooseTransferPlan(packageBytes.length, profileName);
+  const extra = plan.staticQr ? " It will use one static QR." : "";
+  startButton.textContent = plan.staticQr ? "Show QR" : "Start stream";
+  setStatus(`${metadata.name} is ready. Package size: ${formatBytes(packageBytes.length)}.${extra}`, "good");
   updateEstimate();
 }
 
 function updateEstimate() {
-  const profile = profiles[profileName];
-  const blockLen = profile.frameBytes - HEADER_LEN;
-  const k = Math.ceil(packageBytes.length / blockLen);
-  const seconds = (k * overhead) / profile.fps;
+  const plan = chooseTransferPlan(packageBytes.length, profileName);
+  const k = Math.ceil(packageBytes.length / plan.blockLen);
+  const expectedFrames = k === 1 ? 1 : Math.ceil(k * overhead);
+  const seconds = expectedFrames / plan.fps;
   document.getElementById("send-size").textContent = formatBytes(packageBytes.length);
-  document.getElementById("send-time").textContent = formatTime(seconds);
+  document.getElementById("send-time").textContent = plan.staticQr ? "One valid scan" : formatTime(seconds);
   document.getElementById("send-blocks").textContent = String(k);
-  document.getElementById("send-frame-size").textContent = `${profile.frameBytes} B`;
-  document.getElementById("send-rate").textContent = `${((blockLen * profile.fps) / 1024).toFixed(1)} KB/s raw`;
+  document.getElementById("send-frame-size").textContent = `${plan.blockLen + HEADER_LEN} B`;
+  document.getElementById("send-rate").textContent = plan.staticQr
+    ? "Static QR"
+    : `${((plan.blockLen * plan.fps) / 1024).toFixed(1)} KB/s raw`;
+  document.getElementById("send-mode").textContent = plan.label;
 }
 
 function formatTime(seconds) {
-  if (seconds < 60) return `${Math.max(1, Math.ceil(seconds))} s`;
+  if (seconds < 1) return "Under 1 s";
+  if (seconds < 60) return `${Math.ceil(seconds)} s`;
   return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
 }
 
 startButton.addEventListener("click", startStream);
 pauseButton.addEventListener("click", () => {
-  if (!streamState) return;
+  if (!streamState || streamState.plan.staticQr) return;
   streamState.paused = !streamState.paused;
   pauseButton.textContent = streamState.paused ? "Resume" : "Pause";
   if (!streamState.paused) scheduleTick(streamState.generation);
@@ -127,6 +130,7 @@ pauseButton.addEventListener("click", () => {
 stopButton.addEventListener("click", stopStream);
 fullscreenButton.addEventListener("click", async () => {
   document.body.classList.add("fullscreen-stream");
+  if (streamState?.queue.length) sizeVisibleCanvas(streamState.queue[0].canvas.width);
   try {
     await document.documentElement.requestFullscreen?.();
   } catch {
@@ -135,6 +139,7 @@ fullscreenButton.addEventListener("click", async () => {
 });
 document.addEventListener("fullscreenchange", () => {
   if (!document.fullscreenElement) document.body.classList.remove("fullscreen-stream");
+  if (streamState?.queue.length) sizeVisibleCanvas(streamState.queue[0].canvas.width);
 });
 saveButton.addEventListener("click", () => {
   if (!packageBytes || !metadata) return;
@@ -145,10 +150,9 @@ saveButton.addEventListener("click", () => {
 async function startStream() {
   if (!packageBytes) return;
   stopStream();
-  const profile = profiles[profileName];
-  const blockLen = profile.frameBytes - HEADER_LEN;
+  const plan = chooseTransferPlan(packageBytes.length, profileName);
   const sessionId = crypto.getRandomValues(new Uint16Array(1))[0] || 1;
-  const encoder = new LTEncoder(packageBytes, blockLen, sessionId);
+  const encoder = new LTEncoder(packageBytes, plan.blockLen, sessionId);
   if (encoder.k > 65535) {
     setStatus("This file needs too many source blocks for the selected profile.", "bad");
     return;
@@ -156,7 +160,7 @@ async function startStream() {
   const generation = Date.now() + Math.random();
   streamState = {
     generation,
-    profile,
+    plan,
     encoder,
     sessionId,
     checksum: fnv1a(packageBytes),
@@ -166,22 +170,32 @@ async function startStream() {
     nextAt: performance.now(),
     version: undefined,
   };
-  for (let i = 0; i < lookahead; i++) streamState.queue.push(buildQrFrame(streamState));
+
+  const queueSize = plan.staticQr ? 1 : lookahead;
+  for (let i = 0; i < queueSize; i++) streamState.queue.push(buildQrFrame(streamState));
   sizeVisibleCanvas(streamState.queue[0].canvas.width);
+  renderFrame(streamState.queue[0]);
+
   startButton.disabled = true;
-  pauseButton.disabled = false;
+  pauseButton.disabled = plan.staticQr;
   stopButton.disabled = false;
   fullscreenButton.disabled = false;
-  pauseButton.textContent = "Pause";
-  setStatus(`${profile.name} stream running. Keep the complete QR and white margin visible.`, "good");
+  pauseButton.textContent = plan.staticQr ? "Static" : "Pause";
+  setStatus(
+    plan.staticQr
+      ? "Static one-QR transfer running. The receiver only needs one successful scan."
+      : `${plan.label} running at ${plan.fps} FPS. Keep the complete QR and white margin visible.`,
+    "good",
+  );
   requestWakeLock();
-  scheduleTick(generation);
+  if (!plan.staticQr) scheduleTick(generation);
 }
 
 function stopStream() {
   if (streamState) streamState.generation = -1;
   streamState = null;
   startButton.disabled = !packageBytes;
+  if (packageBytes) startButton.textContent = chooseTransferPlan(packageBytes.length, profileName).staticQr ? "Show QR" : "Start stream";
   pauseButton.disabled = true;
   stopButton.disabled = true;
   fullscreenButton.disabled = true;
@@ -191,7 +205,7 @@ function stopStream() {
 }
 
 function buildQrFrame(state) {
-  const seq = state.sequence++;
+  const seq = state.plan.staticQr ? 0 : state.sequence++;
   const block = state.encoder.encode(seq);
   const bytes = packFrame({
     sessionId: state.sessionId,
@@ -202,7 +216,7 @@ function buildQrFrame(state) {
     payloadFnv: state.checksum,
   }, block);
   const qr = QRCode.create([{ data: bytes, mode: "byte" }], {
-    errorCorrectionLevel: state.profile.ecc,
+    errorCorrectionLevel: state.plan.ecc,
     version: state.version,
     maskPattern: 4,
   });
@@ -242,23 +256,27 @@ function sizeVisibleCanvas(moduleSize) {
   canvas.style.height = `${canvas.height / dpr}px`;
 }
 
-function scheduleTick(generation) {
-  if (!streamState || streamState.generation !== generation || streamState.paused) return;
-  const interval = 1000 / streamState.profile.fps;
-  const wait = Math.max(0, streamState.nextAt - performance.now());
-  setTimeout(() => tick(generation), wait);
-  streamState.nextAt += interval;
-}
-
-function tick(generation) {
-  if (!streamState || streamState.generation !== generation || streamState.paused) return;
-  const frame = streamState.queue.shift();
+function renderFrame(frame) {
   if (!canvas.width || Math.round(canvas.width / frame.canvas.width) < 1) sizeVisibleCanvas(frame.canvas.width);
   context.imageSmoothingEnabled = false;
   context.fillStyle = "white";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(frame.canvas, 0, 0, canvas.width, canvas.height);
   document.getElementById("send-sequence").textContent = frame.seq.toLocaleString();
+}
+
+function scheduleTick(generation) {
+  if (!streamState || streamState.generation !== generation || streamState.paused || streamState.plan.staticQr) return;
+  const interval = 1000 / streamState.plan.fps;
+  const wait = Math.max(0, streamState.nextAt - performance.now());
+  setTimeout(() => tick(generation), wait);
+  streamState.nextAt += interval;
+}
+
+function tick(generation) {
+  if (!streamState || streamState.generation !== generation || streamState.paused || streamState.plan.staticQr) return;
+  const frame = streamState.queue.shift();
+  renderFrame(frame);
   streamState.queue.push(buildQrFrame(streamState));
   scheduleTick(generation);
 }
@@ -279,4 +297,6 @@ function releaseWakeLock() {
 window.addEventListener("resize", () => {
   if (!streamState || !streamState.queue.length) return;
   sizeVisibleCanvas(streamState.queue[0].canvas.width);
+  renderFrame(streamState.queue[0]);
 });
+

@@ -77,7 +77,8 @@ async function startCamera() {
   await video.play().catch(() => undefined);
   cameraFrame.hidden = false;
   stopButton.disabled = false;
-  buildWorkers(Number(document.getElementById("worker-count").value));
+  const desiredWorkers = Number(document.getElementById("worker-count").value);
+  if (workers.length !== desiredWorkers) buildWorkers(desiredWorkers);
   const settings = stream.getVideoTracks()[0]?.getSettings();
   document.getElementById("metric-camera").textContent = `${settings?.width || "?"}x${settings?.height || "?"} @ ${Math.round(settings?.frameRate || 0)}`;
   setStatus("Searching for a JamScan QR stream...");
@@ -98,9 +99,7 @@ function stopCamera() {
   stream = null;
   video.srcObject = null;
   cameraFrame.hidden = true;
-  for (const worker of workers) worker.terminate();
-  workers = [];
-  busy = [];
+  busy = busy.map(() => false);
   clearInterval(statsTimer);
   statsTimer = null;
   wakeLock?.release?.().catch(() => undefined);
@@ -120,6 +119,7 @@ function buildWorkers(count) {
     worker.onmessage = (event) => {
       if (event.data.id === -1) return;
       busy[slot] = false;
+      if (!stream || event.data.generation !== captureGeneration) return;
       if (event.data.bytes) {
         decodeTimes.push(performance.now());
         onDecoded(new Uint8Array(event.data.bytes));
@@ -156,7 +156,7 @@ function captureFrame() {
   context.drawImage(video, 0, 0, width, height);
   const image = context.getImageData(0, 0, width, height);
   busy[slot] = true;
-  workers[slot].postMessage({ id: frameId++, buffer: image.data.buffer, width, height }, [image.data.buffer]);
+  workers[slot].postMessage({ id: frameId++, generation: captureGeneration, buffer: image.data.buffer, width, height }, [image.data.buffer]);
 }
 
 function onDecoded(bytes) {
@@ -220,3 +220,11 @@ function updateStats() {
 function prune(values, now) {
   while (values.length && values[0] < now - 2000) values.shift();
 }
+
+
+window.addEventListener("beforeunload", () => {
+  for (const worker of workers) worker.terminate();
+});
+
+// Warm the QR decoder before camera permission is requested.
+buildWorkers(Number(document.getElementById("worker-count").value));

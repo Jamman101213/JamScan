@@ -57,6 +57,12 @@ function frameSeed(sessionId, seq) {
 }
 
 function frameIndices(k, cdf, sessionId, seq) {
+  // Send source blocks directly at the start of every cycle.
+  const repairCount = Math.max(4, Math.ceil(k * 0.35));
+  const cycleLength = k + repairCount;
+  const cyclePosition = seq % cycleLength;
+  if (cyclePosition < k) return [cyclePosition];
+
   const random = splitmix32(frameSeed(sessionId, seq));
   const sample = random() * 2 ** -32;
   let low = 0;

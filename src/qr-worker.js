@@ -8,16 +8,16 @@ prepareZXingModule({
 });
 
 self.onmessage = async (event) => {
-  const { id, buffer, width, height } = event.data;
+  const { id, generation, buffer, width, height } = event.data;
   const started = performance.now();
   try {
     const image = new ImageData(new Uint8ClampedArray(buffer), width, height);
     const results = await readBarcodes(image, { formats: ["QRCode"], maxNumberOfSymbols: 1 });
     const result = results.find((item) => item.isValid && item.bytes.length > 0);
     const bytes = result ? new Uint8Array(result.bytes) : null;
-    self.postMessage({ id, bytes, elapsed: performance.now() - started }, bytes ? [bytes.buffer] : []);
+    self.postMessage({ id, generation, bytes, elapsed: performance.now() - started }, bytes ? [bytes.buffer] : []);
   } catch {
-    self.postMessage({ id, bytes: null, elapsed: performance.now() - started });
+    self.postMessage({ id, generation, bytes: null, elapsed: performance.now() - started });
   }
 };
 
