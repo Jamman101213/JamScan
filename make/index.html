@@ -94,7 +94,7 @@
         </div>
 
         <div class="canvas-shell" id="canvasShell">
-          <canvas id="streamCanvas" width="960" height="960" aria-label="JamScan animated multi-code stream"></canvas>
+          <canvas id="streamCanvas" width="1080" height="1080" aria-label="JamScan animated 64-tile mosaic stream"></canvas>
           <div class="canvas-empty" id="streamEmpty"><strong>No stream loaded</strong><span>Build a package to create frames.</span></div>
         </div>
 
@@ -104,19 +104,17 @@
           <button class="button" id="fullscreenButton" type="button" disabled>Full-screen display</button>
           <label class="speed-control">Speed
             <select id="speedSelect">
-              <option value="100">Reliable - 10 flashes/s</option>
-              <option value="50">Fast - 20 flashes/s</option>
-              <option value="42" selected>Recommended - 24 flashes/s</option>
-              <option value="33">Very fast - 30 flashes/s</option>
-              <option value="17">High refresh - 60 flashes/s</option>
-              <option value="1">Display maximum</option>
+              <option value="125">Most reliable - 8 mosaics/s</option>
+              <option value="100" selected>Recommended - 10 mosaics/s</option>
+              <option value="67">Fast - 15 mosaics/s</option>
+              <option value="50">Very fast - 20 mosaics/s</option>
+              <option value="33">Experimental - 30 mosaics/s</option>
             </select>
           </label>
-          <label class="speed-control">Codes per flash
+          <label class="speed-control">Tiles per mosaic
             <select id="codeCountSelect">
-              <option value="1">1 code</option>
-              <option value="2">2 codes</option>
-              <option value="4" selected>4 codes</option>
+              <option value="1">1 legacy code</option>
+              <option value="64" selected>64-tile seamless mosaic</option>
             </select>
           </label>
         </div>
@@ -129,10 +127,10 @@
           <div class="metric"><span>Actual rate</span><strong id="metricRate">-</strong></div>
           <div class="metric"><span>Stream</span><strong id="metricCycle">-</strong></div>
           <div class="metric"><span>Join point</span><strong id="metricStart">-</strong></div>
-          <div class="metric"><span>Codes per flash</span><strong id="metricCodes">-</strong></div>
+          <div class="metric"><span>Tiles per mosaic</span><strong id="metricCodes">-</strong></div>
         </div>
 
-        <div class="notice-box">Keep the complete white display visible, including the white space around every code. Four-code mode uses a 2 by 2 layout with no dark outer frame. On a phone, Full-screen display gives the scanner the largest possible code area.</div>
+        <div class="notice-box">Keep the complete white display visible, including all four small corner markers. The default mode merges 64 data tiles into one seamless mosaic with no internal divider lines. Use Full-screen display for the largest and clearest scan area.</div>
       </article>
     </section>
   </main>

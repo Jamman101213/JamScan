@@ -36,7 +36,7 @@
     <section class="page-heading">
       <p class="kicker">Scan</p>
       <h1>Scan moving dots</h1>
-      <p>Point the camera at a JamScan stream. You can begin anywhere. The scanner finds up to four codes at once, corrects rotation and perspective, and joins the current repair stream immediately.</p>
+      <p>Point the camera at the complete JamScan mosaic. The scanner locks onto four corner markers, corrects rotation and perspective once, then reads up to 64 seamless data tiles from each camera image.</p>
     </section>
 
     <section class="workspace-grid scan-grid">
@@ -44,7 +44,7 @@
       <article class="panel-card">
         <div class="panel-heading">
           <h2>Camera</h2>
-          <p>Keep the complete JamScan display visible. Nothing is drawn over the live camera image.</p>
+          <p>Keep the entire white mosaic visible, including its four small corner markers. Nothing is drawn over the live camera image.</p>
         </div>
 
         <div class="camera-shell">
@@ -87,15 +87,15 @@
 
         <div class="sub-panel">
           <h3>Test a frame image</h3>
-          <p>Select a screenshot of one JamScan frame. A complete package normally requires many different frames.</p>
+          <p>Select a screenshot of one JamScan mosaic. One image can contain as many as 64 repair codes.</p>
           <input id="frameImageInput" type="file" accept="image/*" hidden>
           <button class="button" id="frameImageButton" type="button">Choose frame image</button>
         </div>
 
         <ul class="plain-list">
-          <li>Any valid code can identify and join the stream.</li>
-          <li>Up to four codes are decoded from each camera image.</li>
-          <li>Sequence gaps are reported but do not stop recovery.</li>
+          <li>Any valid tile can identify and join the stream.</li>
+          <li>Up to 64 seamless tiles are decoded from each camera image.</li>
+          <li>The scanner can begin during any mosaic and does not need a special first frame.</li>
           <li>Repair codes replace information lost in missed flashes.</li>
           <li>Damaged codes fail the CRC check.</li>
           <li>Recovered content stays hidden until the warning is accepted.</li>

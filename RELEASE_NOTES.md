@@ -1,41 +1,25 @@
-# Mobile camera no-bars update
+# JamScan 64-tile mosaic release
 
-- Removed every visual overlay from the live camera preview.
-- Matched the preview and decoder canvas to the camera's real aspect ratio.
-- Removed fixed 4:3 letterboxing and black preview bars.
-- Changed the sender frame and canvas container to a clear white outer margin.
-- Increased spacing around the 2 by 2 code layout.
-- Stopped counting blurry search frames as rejected codes.
-- Added a test that confirms the complete outer edge of a four-code display is white.
+## Main changes
 
-# JamScan mobile scanner layout fix
+- Replaced the unreliable multiple separate-code layout with one seamless 8 by 8 mosaic.
+- Made 64 repair tiles the default on every supported device.
+- Removed internal divider lines and per-tile locator borders.
+- Added four larger corner markers around the complete mosaic.
+- Changed the scanner to locate the mosaic once and sample 64 fixed tile positions.
+- Reduced fountain block size to 40 bytes so every tile remains readable at mobile camera resolution.
+- Added per-tile rotation, mirror, header CRC, and payload CRC checks.
+- Changed the recommended speed to 10 mosaics per second to reduce rolling-shutter and exposure mixing.
+- Batched scan-page UI updates so reading 64 tiles does not trigger 64 separate layout updates.
+- Increased the internal camera sampling limit to 1280 pixels.
+- Kept legacy single-code decoding as a fallback.
 
-- Removed the dark camera mask that covered the outer parts of four-code streams.
-- Changed the scan guide to a centered square that matches the full JamScan display.
-- Moved scanner status text outside the camera image so it cannot cover a code.
-- Changed the sender container from black to white so the complete locator and quiet zones remain visible.
-- Added a true full-screen white presentation layout for mobile, desktop, and VR.
-- Kept one-code, two-code, and four-code fountain transfer support.
+## Test results
 
-# JamScan fast multi-code release
+The automated test decodes all 64 tiles at normal camera resolution at 0, 2, and -2 degrees. It also verifies fountain recovery after 35 percent simulated code loss.
 
-## Changes
-
-- Added one, two, and four codes per displayed flash.
-- Added a continuous LT fountain stream that can be joined at any point.
-- Added recovery from dropped camera frames without waiting for an exact frame to repeat.
-- Added fast locked-code scanning that skips a full image search when all known codes decode.
-- Added camera-frame processing through `requestVideoFrameCallback` where available.
-- Added linear collected-code progress while keeping solved-block and integrity checks.
-- Added Decimen Optical Transfer attribution and its MIT License notice.
-- Added the ChatGPT GPT-5.6 Thinking development note requested by the project author.
+At a deliberately small 640 by 480 capture, the scanner can still recover a partial set of tiles. Fountain repair lets later mosaics supply the missing information.
 
 ## Compatibility
 
-This release uses JamScan visual protocol version 4. Older JamScan visual streams are not compatible with this scanner. Saved `.jscan` package files keep package version 1.
-
-## Recommended settings
-
-- Desktop or VR: four codes and Recommended speed.
-- Modern phone sender: two codes and Recommended speed.
-- Difficult lighting or an older receiving phone: one or two codes and Fast or Reliable speed.
+This release changes the visual transfer format. Older animated JamScan streams are not compatible with this scanner. Saved `.jscan` package files remain package version 1.

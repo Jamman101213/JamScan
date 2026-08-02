@@ -264,10 +264,8 @@
   function startPage() {
     ui.bindDropZone(element("sourceDrop"), element("sourceFile"), setSourceFile);
 
-    // Mobile code count
-    if (window.JamScanDevice?.layout === "mobile") {
-      element("codeCountSelect").value = "2";
-    }
+    // Default mosaic mode
+    element("codeCountSelect").value = "64";
 
     element("fileModeButton").addEventListener("click", () => setMode("file"));
     element("textModeButton").addEventListener("click", () => setMode("text"));

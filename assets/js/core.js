@@ -10,7 +10,15 @@
   const CODE_GRID = DATA_GRID + (QUIET + BORDER + SEPARATOR) * 2;
   const INNER_GRID = DATA_GRID + (BORDER + SEPARATOR) * 2;
   const FRAME_HEADER_BYTES = 36;
-  const MAX_PAYLOAD = 320;
+  const MAX_PAYLOAD = 40;
+
+  // 64-tile mosaic settings
+  const MOSAIC_SIDE = 8;
+  const MOSAIC_COUNT = MOSAIC_SIDE * MOSAIC_SIDE;
+  const MOSAIC_TILE = 28;
+  const MOSAIC_MARGIN = 14;
+  const MOSAIC_MARKER = 11;
+  const MOSAIC_GRID = MOSAIC_MARGIN * 2 + MOSAIC_TILE * MOSAIC_SIDE;
   const MAX_SOURCE_SIZE = 256 * 1024 * 1024;
   const FRAME_VERSION = 4;
   const MAGIC = new Uint8Array([0x4a, 0x53, 0x43, 0x41, 0x4e, 0x01]);
@@ -411,6 +419,79 @@
     };
   }
 
+  // Mosaic corner marker
+  function mosaicMarkerBit(x, y) {
+    const edge = x < 2 || y < 2 || x >= MOSAIC_MARKER - 2 || y >= MOSAIC_MARKER - 2;
+    const center = x >= 4 && x <= 6 && y >= 4 && y <= 6;
+    return edge || center ? 1 : 0;
+  }
+
+  // Draw mosaic marker
+  function drawMosaicMarker(context, left, top, moduleSize) {
+    context.fillStyle = "#ffffff";
+    context.fillRect(left, top, MOSAIC_MARKER * moduleSize, MOSAIC_MARKER * moduleSize);
+
+    context.fillStyle = "#111111";
+    for (let y = 0; y < MOSAIC_MARKER; y += 1) {
+      for (let x = 0; x < MOSAIC_MARKER; x += 1) {
+        if (!mosaicMarkerBit(x, y)) continue;
+        context.fillRect(left + x * moduleSize, top + y * moduleSize, moduleSize, moduleSize);
+      }
+    }
+  }
+
+  // Draw one mosaic tile
+  function drawMosaicTile(context, frame, left, top, moduleSize) {
+    const packet = concatArrays([frame.header, frame.payload]);
+    const bits = bytesToBits(packet);
+    const random = xorshift((frame.streamId ^ frame.sequence ^ 0x6d6f7361) >>> 0);
+    let bitIndex = 0;
+
+    for (let y = 0; y < MOSAIC_TILE; y += 1) {
+      for (let x = 0; x < MOSAIC_TILE; x += 1) {
+        const bit = bitIndex < bits.length ? bits[bitIndex++] : random() > 0.5 ? 1 : 0;
+        if (!bit) continue;
+        context.fillStyle = "#111111";
+        context.fillRect(left + x * moduleSize, top + y * moduleSize, moduleSize, moduleSize);
+      }
+    }
+  }
+
+  // Draw the seamless 64-tile mosaic
+  function renderMosaicGrid(canvas, frames) {
+    const context = canvas.getContext("2d", { alpha: false });
+    const list = frames.filter(Boolean).slice(0, MOSAIC_COUNT);
+    const shortSide = Math.min(canvas.width, canvas.height);
+    const maximumCodeSide = Math.floor(shortSide * 0.94);
+    const moduleSize = Math.max(1, Math.floor(maximumCodeSide / MOSAIC_GRID));
+    const codeSide = moduleSize * MOSAIC_GRID;
+    const left = Math.floor((canvas.width - codeSide) / 2);
+    const top = Math.floor((canvas.height - codeSide) / 2);
+    const tileStart = MOSAIC_MARGIN * moduleSize;
+    const tileSize = MOSAIC_TILE * moduleSize;
+
+    context.imageSmoothingEnabled = false;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let index = 0; index < list.length; index += 1) {
+      const column = index % MOSAIC_SIDE;
+      const row = Math.floor(index / MOSAIC_SIDE);
+      drawMosaicTile(
+        context,
+        list[index],
+        left + tileStart + column * tileSize,
+        top + tileStart + row * tileSize,
+        moduleSize
+      );
+    }
+
+    drawMosaicMarker(context, left, top, moduleSize);
+    drawMosaicMarker(context, left + codeSide - MOSAIC_MARKER * moduleSize, top, moduleSize);
+    drawMosaicMarker(context, left + codeSide - MOSAIC_MARKER * moduleSize, top + codeSide - MOSAIC_MARKER * moduleSize, moduleSize);
+    drawMosaicMarker(context, left, top + codeSide - MOSAIC_MARKER * moduleSize, moduleSize);
+  }
+
   // Draw one code
   function drawFrame(context, frame, left, top, width, height) {
     const moduleWidth = width / CODE_GRID;
@@ -477,8 +558,14 @@
 
   // Draw several codes in one flash
   function renderFrameGrid(canvas, frames) {
+    const list = frames.filter(Boolean);
+
+    if (list.length > 4) {
+      renderMosaicGrid(canvas, list);
+      return;
+    }
+
     const context = canvas.getContext("2d", { alpha: false });
-    const list = frames.filter(Boolean).slice(0, 4);
     const count = Math.max(1, list.length);
     const columns = count === 1 ? 1 : 2;
     const rows = count <= 2 ? 1 : 2;
@@ -548,19 +635,10 @@
     return output;
   }
 
-  // Read grid packet
-  function parseGridBits(bits) {
-    if (verifyFinder(bits) < 0.78) throw new Error("Finder check failed");
-
-    const dataBits = [];
-    for (let y = 0; y < DATA_GRID; y += 1) {
-      for (let x = 0; x < DATA_GRID; x += 1) {
-        if (!isReserved(x, y)) dataBits.push(bits[y * DATA_GRID + x]);
-      }
-    }
-
-    const headerBitCount = FRAME_HEADER_BYTES * 8;
-    const header = bitsToBytes(dataBits.slice(0, headerBitCount));
+  // Read one complete frame packet
+  function parseFramePacket(packet) {
+    if (packet.length < FRAME_HEADER_BYTES) throw new Error("Incomplete frame");
+    const header = packet.slice(0, FRAME_HEADER_BYTES);
 
     if (header[0] !== 0xa5 || header[1] !== 0x5a || header[2] !== FRAME_VERSION) {
       throw new Error("Not a JamScan frame");
@@ -577,16 +655,15 @@
     const packageCRC = readU32(header, 24);
     const expectedCRC = readU32(header, 28);
 
-    if (total < 1 || total > 1000000) throw new Error("Invalid block count");
-    if (blockSize < 1 || blockSize > MAX_PAYLOAD) throw new Error("Invalid block size");
+    if (total < 1 || total > 10000000) throw new Error("Invalid block count");
+    if (blockSize < 1 || blockSize > 1024) throw new Error("Invalid block size");
     if (packageLength < 1 || packageLength > MAX_SOURCE_SIZE + 2 * 1024 * 1024) {
       throw new Error("Invalid package length");
     }
 
-    const payloadBits = dataBits.slice(headerBitCount, headerBitCount + blockSize * 8);
-    if (payloadBits.length < blockSize * 8) throw new Error("Incomplete frame");
-
-    const payload = bitsToBytes(payloadBits);
+    const payloadEnd = FRAME_HEADER_BYTES + blockSize;
+    if (packet.length < payloadEnd) throw new Error("Incomplete frame");
+    const payload = packet.slice(FRAME_HEADER_BYTES, payloadEnd);
     if (crc32(payload) !== expectedCRC) throw new Error("CRC mismatch");
 
     return {
@@ -602,6 +679,20 @@
       packageCRC,
       blockSize
     };
+  }
+
+  // Read grid packet
+  function parseGridBits(bits) {
+    if (verifyFinder(bits) < 0.78) throw new Error("Finder check failed");
+
+    const dataBits = [];
+    for (let y = 0; y < DATA_GRID; y += 1) {
+      for (let x = 0; x < DATA_GRID; x += 1) {
+        if (!isReserved(x, y)) dataBits.push(bits[y * DATA_GRID + x]);
+      }
+    }
+
+    return parseFramePacket(bitsToBytes(dataBits));
   }
 
   // Try grid directions
@@ -943,11 +1034,324 @@
     };
   }
 
+  // Rotate any square grid
+  function rotateSquareGrid(input, side) {
+    const output = new Uint8Array(side * side);
+    for (let y = 0; y < side; y += 1) {
+      for (let x = 0; x < side; x += 1) {
+        output[y * side + x] = input[(side - 1 - x) * side + y];
+      }
+    }
+    return output;
+  }
+
+  // Mirror any square grid
+  function mirrorSquareGrid(input, side) {
+    const output = new Uint8Array(side * side);
+    for (let y = 0; y < side; y += 1) {
+      for (let x = 0; x < side; x += 1) {
+        output[y * side + x] = input[y * side + (side - 1 - x)];
+      }
+    }
+    return output;
+  }
+
+  // Decode one mosaic tile
+  function decodeMosaicTile(bits) {
+    let current = bits;
+
+    for (let rotation = 0; rotation < 4; rotation += 1) {
+      try {
+        const frame = parseFramePacket(bitsToBytes(current));
+        frame.rotation = rotation * 90;
+        frame.mirrored = false;
+        return frame;
+      } catch {
+        current = rotateSquareGrid(current, MOSAIC_TILE);
+      }
+    }
+
+    current = mirrorSquareGrid(bits, MOSAIC_TILE);
+    for (let rotation = 0; rotation < 4; rotation += 1) {
+      try {
+        const frame = parseFramePacket(bitsToBytes(current));
+        frame.rotation = rotation * 90;
+        frame.mirrored = true;
+        return frame;
+      } catch {
+        current = rotateSquareGrid(current, MOSAIC_TILE);
+      }
+    }
+
+    throw new Error("Frame damaged");
+  }
+
+  // Marker pattern score
+  function mosaicMarkerScore(gray, width, height, box, threshold) {
+    let matches = 0;
+    let total = 0;
+    const boxWidth = box.maxX - box.minX + 1;
+    const boxHeight = box.maxY - box.minY + 1;
+
+    for (let y = 0; y < MOSAIC_MARKER; y += 1) {
+      for (let x = 0; x < MOSAIC_MARKER; x += 1) {
+        const px = box.minX + ((x + 0.5) / MOSAIC_MARKER) * boxWidth;
+        const py = box.minY + ((y + 0.5) / MOSAIC_MARKER) * boxHeight;
+        const bit = sampleGray(gray, width, height, px, py) <= threshold ? 1 : 0;
+        if (bit === mosaicMarkerBit(x, y)) matches += 1;
+        total += 1;
+      }
+    }
+
+    return matches / total;
+  }
+
+  // Find the four mosaic corner markers
+  function findMosaicMarkerCandidates(gray, width, height, threshold) {
+    const visited = new Uint8Array(width * height);
+    const queue = new Int32Array(width * height);
+    const candidates = [];
+    const minimumSide = Math.max(8, Math.floor(Math.min(width, height) * 0.014));
+    const maximumSide = Math.max(minimumSide + 1, Math.floor(Math.min(width, height) * 0.15));
+
+    for (let start = 0; start < gray.length; start += 1) {
+      if (visited[start] || gray[start] > threshold) continue;
+
+      let head = 0;
+      let tail = 0;
+      queue[tail++] = start;
+      visited[start] = 1;
+      let area = 0;
+      let minX = width;
+      let minY = height;
+      let maxX = 0;
+      let maxY = 0;
+      let tl = start;
+      let tr = start;
+      let br = start;
+      let bl = start;
+      let minSum = Infinity;
+      let maxSum = -Infinity;
+      let minDiff = Infinity;
+      let maxDiff = -Infinity;
+
+      while (head < tail) {
+        const point = queue[head++];
+        const x = point % width;
+        const y = Math.floor(point / width);
+        area += 1;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+
+        const sum = x + y;
+        const diff = x - y;
+        if (sum < minSum) { minSum = sum; tl = point; }
+        if (sum > maxSum) { maxSum = sum; br = point; }
+        if (diff > maxDiff) { maxDiff = diff; tr = point; }
+        if (diff < minDiff) { minDiff = diff; bl = point; }
+
+        const neighbors = [point - 1, point + 1, point - width, point + width];
+        for (let index = 0; index < neighbors.length; index += 1) {
+          const next = neighbors[index];
+          if (next < 0 || next >= gray.length || visited[next]) continue;
+          const nx = next % width;
+          const ny = Math.floor(next / width);
+          if (Math.abs(nx - x) + Math.abs(ny - y) !== 1) continue;
+          if (gray[next] > threshold) continue;
+          visited[next] = 1;
+          queue[tail++] = next;
+        }
+      }
+
+      const boxWidth = maxX - minX + 1;
+      const boxHeight = maxY - minY + 1;
+      if (boxWidth < minimumSide || boxHeight < minimumSide || boxWidth > maximumSide || boxHeight > maximumSide) continue;
+      const ratio = boxWidth / boxHeight;
+      if (ratio < 0.68 || ratio > 1.47) continue;
+      const fill = area / (boxWidth * boxHeight);
+      if (fill < 0.16 || fill > 0.76) continue;
+
+      const box = { minX, minY, maxX, maxY };
+      const pattern = mosaicMarkerScore(gray, width, height, box, threshold);
+      if (pattern < 0.58) continue;
+
+      candidates.push({
+        area,
+        pattern,
+        score: pattern * pattern * area,
+        box,
+        center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
+        corners: [
+          { x: tl % width, y: Math.floor(tl / width) },
+          { x: tr % width, y: Math.floor(tr / width) },
+          { x: br % width, y: Math.floor(br / width) },
+          { x: bl % width, y: Math.floor(bl / width) }
+        ]
+      });
+    }
+
+    candidates.sort((left, right) => right.score - left.score);
+    return candidates.slice(0, 12);
+  }
+
+  // Select one marker rectangle
+  function selectMosaicCorners(candidates, width, height) {
+    if (candidates.length < 4) throw new Error("Mosaic markers not found");
+    let best = null;
+    const list = candidates.slice(0, 10);
+
+    for (let a = 0; a < list.length - 3; a += 1) {
+      for (let b = a + 1; b < list.length - 2; b += 1) {
+        for (let c = b + 1; c < list.length - 1; c += 1) {
+          for (let d = c + 1; d < list.length; d += 1) {
+            const group = [list[a], list[b], list[c], list[d]];
+            const tl = group.reduce((bestItem, item) => item.center.x + item.center.y < bestItem.center.x + bestItem.center.y ? item : bestItem);
+            const br = group.reduce((bestItem, item) => item.center.x + item.center.y > bestItem.center.x + bestItem.center.y ? item : bestItem);
+            const tr = group.reduce((bestItem, item) => item.center.x - item.center.y > bestItem.center.x - bestItem.center.y ? item : bestItem);
+            const bl = group.reduce((bestItem, item) => item.center.x - item.center.y < bestItem.center.x - bestItem.center.y ? item : bestItem);
+            if (new Set([tl, tr, br, bl]).size !== 4) continue;
+
+            const top = Math.hypot(tr.center.x - tl.center.x, tr.center.y - tl.center.y);
+            const bottom = Math.hypot(br.center.x - bl.center.x, br.center.y - bl.center.y);
+            const left = Math.hypot(bl.center.x - tl.center.x, bl.center.y - tl.center.y);
+            const right = Math.hypot(br.center.x - tr.center.x, br.center.y - tr.center.y);
+            if (Math.min(top, bottom, left, right) < Math.min(width, height) * 0.28) continue;
+
+            const horizontal = (top + bottom) / 2;
+            const vertical = (left + right) / 2;
+            const aspect = horizontal / vertical;
+            if (aspect < 0.55 || aspect > 1.8) continue;
+
+            const sizeValues = group.map(item => Math.sqrt(item.area));
+            const sizeRatio = Math.max(...sizeValues) / Math.max(1, Math.min(...sizeValues));
+            if (sizeRatio > 2.2) continue;
+
+            const areaScore = horizontal * vertical;
+            const patternScore = group.reduce((sum, item) => sum + item.pattern, 0) / 4;
+            const score = areaScore * patternScore * patternScore / sizeRatio;
+            if (!best || score > best.score) best = { score, tl, tr, br, bl };
+          }
+        }
+      }
+    }
+
+    if (!best) throw new Error("Mosaic shape not found");
+    return [best.tl.corners[0], best.tr.corners[1], best.br.corners[2], best.bl.corners[3]];
+  }
+
+  // Sample one tile from a locked mosaic
+  function sampleMosaicTile(gray, width, height, map, column, row) {
+    const levels = new Uint8Array(MOSAIC_TILE * MOSAIC_TILE);
+    const tileX = MOSAIC_MARGIN + column * MOSAIC_TILE;
+    const tileY = MOSAIC_MARGIN + row * MOSAIC_TILE;
+    const offset = 0.16 / MOSAIC_GRID;
+
+    for (let y = 0; y < MOSAIC_TILE; y += 1) {
+      for (let x = 0; x < MOSAIC_TILE; x += 1) {
+        const u = (tileX + x + 0.5) / MOSAIC_GRID;
+        const v = (tileY + y + 0.5) / MOSAIC_GRID;
+        const points = [
+          projectPoint(map, u, v),
+          projectPoint(map, u - offset, v),
+          projectPoint(map, u + offset, v),
+          projectPoint(map, u, v - offset),
+          projectPoint(map, u, v + offset)
+        ];
+        let value = 0;
+        for (const point of points) value += sampleGray(gray, width, height, point.x, point.y);
+        levels[y * MOSAIC_TILE + x] = Math.round(value / points.length);
+      }
+    }
+
+    const sorted = [...levels].sort((left, right) => left - right);
+    const dark = sorted[Math.floor(sorted.length * 0.12)];
+    const light = sorted[Math.floor(sorted.length * 0.88)];
+    if (light - dark < 20) throw new Error("Low contrast");
+
+    const baseThreshold = getThreshold(levels);
+    const thresholds = [baseThreshold, Math.round((dark + light) / 2), baseThreshold - 7, baseThreshold + 7];
+    let lastError = new Error("Frame damaged");
+
+    for (const threshold of thresholds) {
+      const bits = new Uint8Array(levels.length);
+      for (let index = 0; index < levels.length; index += 1) bits[index] = levels[index] <= threshold ? 1 : 0;
+      try {
+        return decodeMosaicTile(bits);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError;
+  }
+
+  // Read all valid tiles from one mosaic
+  function sampleMosaic(gray, width, height, corners, maxFrames = MOSAIC_COUNT) {
+    const map = makeHomography(corners);
+    const frames = [];
+    const keys = new Set();
+
+    for (let row = 0; row < MOSAIC_SIDE; row += 1) {
+      for (let column = 0; column < MOSAIC_SIDE; column += 1) {
+        if (frames.length >= maxFrames) break;
+        try {
+          const frame = sampleMosaicTile(gray, width, height, map, column, row);
+          const key = `${frame.streamId}:${frame.sequence}`;
+          if (keys.has(key)) continue;
+          keys.add(key);
+          frame.corners = corners;
+          frame.mosaicCorners = corners;
+          frame.tileColumn = column;
+          frame.tileRow = row;
+          frames.push(frame);
+        } catch {
+          // A damaged tile is skipped while other tiles continue.
+        }
+      }
+    }
+
+    if (!frames.length) throw new Error("Mosaic found but no clean tiles decoded");
+    return frames;
+  }
+
+  // Find and read a 64-tile mosaic
+  function sampleMosaicFromImage(gray, width, height, hintCornerSets, maxFrames) {
+    let hints = hintCornerSets;
+    if (Array.isArray(hints) && hints.length === 4 && hints.every(point => point && Number.isFinite(point.x))) hints = [hints];
+
+    if (Array.isArray(hints)) {
+      for (const corners of hints.slice(0, 2)) {
+        if (!Array.isArray(corners) || corners.length !== 4) continue;
+        try {
+          return sampleMosaic(gray, width, height, corners, maxFrames);
+        } catch {
+          // Search for fresh markers when the saved lock moved.
+        }
+      }
+    }
+
+    const threshold = getThreshold(gray);
+    const candidates = findMosaicMarkerCandidates(gray, width, height, threshold);
+    const corners = selectMosaicCorners(candidates, width, height);
+    return sampleMosaic(gray, width, height, corners, maxFrames);
+  }
+
   // Read camera image
-  function sampleFramesFromCanvas(canvas, hintCornerSets = [], maxFrames = 4) {
+  function sampleFramesFromCanvas(canvas, hintCornerSets = [], maxFrames = 64) {
     const context = canvas.getContext("2d", { willReadFrequently: true });
     const image = context.getImageData(0, 0, canvas.width, canvas.height);
     const gray = makeGray(image);
+
+    if (maxFrames > 4) {
+      try {
+        return sampleMosaicFromImage(gray, canvas.width, canvas.height, hintCornerSets, Math.min(maxFrames, MOSAIC_COUNT));
+      } catch {
+        // Legacy single-code search remains available as a fallback.
+      }
+    }
+
     const frames = [];
     const keys = new Set();
     let lastError = new Error("Code not found");
@@ -965,7 +1369,7 @@
     }
 
     if (Array.isArray(hints)) {
-      for (const corners of hints.slice(0, maxFrames)) {
+      for (const corners of hints.slice(0, Math.min(maxFrames, 4))) {
         if (!Array.isArray(corners) || corners.length !== 4) continue;
         try {
           addFrame(sampleCandidate(gray, canvas.width, canvas.height, makeHintCandidate(corners)));
@@ -975,14 +1379,13 @@
       }
     }
 
-    // Skip the full image search when every locked code decoded.
-    if (frames.length >= maxFrames) return frames;
+    if (frames.length >= Math.min(maxFrames, 4)) return frames;
 
     const threshold = getThreshold(gray);
     const candidates = findBorderCandidates(gray, canvas.width, canvas.height, threshold);
 
     for (const candidate of candidates) {
-      if (frames.length >= maxFrames) break;
+      if (frames.length >= Math.min(maxFrames, 4)) break;
       try {
         addFrame(sampleCandidate(gray, canvas.width, canvas.height, candidate));
       } catch (error) {
@@ -1002,6 +1405,9 @@
   window.JamScanCore = {
     DATA_GRID,
     CODE_GRID,
+    MAX_PAYLOAD,
+    MOSAIC_COUNT,
+    MOSAIC_GRID,
     MAX_SOURCE_SIZE,
     FRAME_TYPE,
     textEncoder,
@@ -1023,6 +1429,7 @@
     createCycleFrames,
     renderFrame,
     renderFrameGrid,
+    renderMosaicGrid,
     sampleFrameFromCanvas,
     sampleFramesFromCanvas
   };

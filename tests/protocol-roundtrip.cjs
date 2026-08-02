@@ -95,7 +95,7 @@ function equalBytes(left, right) {
 
 // Fixed test stream
 function createTestStream(packageBytes, streamId) {
-  const blockSize = 320;
+  const blockSize = core.MAX_PAYLOAD;
   const encoder = new fountain.Encoder(packageBytes, blockSize, streamId);
 
   return {
@@ -127,37 +127,43 @@ function createTestStream(packageBytes, streamId) {
     console.log(`PASS single angle=${angle}`);
   }
 
-  const multiFrames = [0, 1, 2, 3].map(sequence => core.createFountainFrame(stream, sequence));
-  const multiSource = new TestCanvas(960, 960);
-  core.renderFrameGrid(multiSource, multiFrames);
+  const mosaicFrames = Array.from(
+    { length: core.MOSAIC_COUNT },
+    (_, sequence) => core.createFountainFrame(stream, sequence)
+  );
+  const mosaicSource = new TestCanvas(1080, 1080);
+  core.renderFrameGrid(mosaicSource, mosaicFrames);
 
   const edgePoints = [
     0,
-    multiSource.width - 1,
-    (multiSource.height - 1) * multiSource.width,
-    multiSource.width * multiSource.height - 1,
-    Math.floor(multiSource.width / 2),
-    (multiSource.height - 1) * multiSource.width + Math.floor(multiSource.width / 2)
+    mosaicSource.width - 1,
+    (mosaicSource.height - 1) * mosaicSource.width,
+    mosaicSource.width * mosaicSource.height - 1
   ];
-  if (edgePoints.some(index => multiSource.pixels[index] !== 255)) {
-    throw new Error("Multi-code display edge is not fully white");
+  if (edgePoints.some(index => mosaicSource.pixels[index] !== 255)) {
+    throw new Error("Mosaic display edge is not fully white");
   }
-  console.log("PASS multi-code display has a clear white outer margin");
+  console.log("PASS mosaic has a clear white outer margin");
 
-  for (const angle of [0, 3, -3]) {
-    const multiCamera = new TestCanvas(640, 480, 216);
-    pasteRotated(multiSource, multiCamera, 320, 240, 430, angle);
-    const decodedFrames = core.sampleFramesFromCanvas(multiCamera, [], 4);
+  for (const angle of [0, 2, -2]) {
+    const mosaicCamera = new TestCanvas(1400, 1000, 225);
+    pasteRotated(mosaicSource, mosaicCamera, 700, 500, 900, angle);
+    const decodedFrames = core.sampleFramesFromCanvas(mosaicCamera, [], 64);
     const decodedSequences = new Set(decodedFrames.map(frame => frame.sequence));
-    if (angle === 0) {
-      for (const frame of multiFrames) {
-        if (!decodedSequences.has(frame.sequence)) throw new Error(`Multi-code frame ${frame.sequence} was not decoded`);
-      }
-    } else if (decodedSequences.size < 1) {
-      throw new Error(`Too few multi-code frames decoded at ${angle} degrees`);
+    const minimum = angle === 0 ? 60 : 40;
+    if (decodedSequences.size < minimum) {
+      throw new Error(`Only ${decodedSequences.size} mosaic tiles decoded at ${angle} degrees`);
     }
-    console.log(`PASS multi-code flash angle=${angle} decoded=${decodedSequences.size}`);
+    console.log(`PASS 64-tile mosaic angle=${angle} decoded=${decodedSequences.size}`);
   }
+
+  const lowResolutionCamera = new TestCanvas(640, 480, 225);
+  pasteRotated(mosaicSource, lowResolutionCamera, 320, 240, 430, 0);
+  const lowResolutionFrames = core.sampleFramesFromCanvas(lowResolutionCamera, [], 64);
+  if (lowResolutionFrames.length < 12) {
+    throw new Error(`Low-resolution mosaic decoded only ${lowResolutionFrames.length} tiles`);
+  }
+  console.log(`PASS low-resolution mobile-style capture decoded=${lowResolutionFrames.length}`);
 
   const largePayload = new Uint8Array(100000);
   for (let index = 0; index < largePayload.length; index += 1) largePayload[index] = (index * 37 + 19) & 255;

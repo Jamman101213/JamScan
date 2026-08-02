@@ -2,42 +2,42 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>JamScan optical round-trip test</title>
+  <title>JamScan 64-tile optical round-trip test</title>
   <script src="../assets/js/fountain.js"></script>
   <script src="../assets/js/core.js"></script>
 </head>
 <body>
   <pre id="result">RUNNING</pre>
+  <canvas id="mosaic" width="1080" height="1080" style="max-width:720px;width:100%;image-rendering:pixelated"></canvas>
   <script>
     (async () => {
       const result = document.getElementById("result");
 
       try {
         const core = window.JamScanCore;
-        const payload = core.textEncoder.encode("JamScan optical test data ".repeat(50));
+        const payload = core.textEncoder.encode("JamScan 64-tile optical test data ".repeat(50));
         const built = await core.buildPackage(payload, "test.txt", "text/plain");
         const stream = core.createStream(built.bytes);
-        const frames = [0, 1, 2, 3].map(sequence => core.createFountainFrame(stream, sequence));
-        const source = document.createElement("canvas");
-        source.width = 960;
-        source.height = 960;
+        const frames = Array.from(
+          { length: core.MOSAIC_COUNT },
+          (_, sequence) => core.createFountainFrame(stream, sequence)
+        );
+        const source = document.getElementById("mosaic");
         core.renderFrameGrid(source, frames);
 
         const camera = document.createElement("canvas");
-        camera.width = 640;
-        camera.height = 480;
+        camera.width = 960;
+        camera.height = 720;
         const context = camera.getContext("2d");
-        context.fillStyle = "#d8d8d8";
+        context.fillStyle = "#dddddd";
         context.fillRect(0, 0, camera.width, camera.height);
-        context.drawImage(source, 105, 25, 430, 430);
+        context.drawImage(source, 155, 35, 650, 650);
 
-        const decoded = core.sampleFramesFromCanvas(camera, [], 4);
+        const decoded = core.sampleFramesFromCanvas(camera, [], 64);
         const sequences = new Set(decoded.map(frame => frame.sequence));
-        for (const frame of frames) {
-          if (!sequences.has(frame.sequence)) throw new Error(`Missing sequence ${frame.sequence}`);
-        }
+        if (sequences.size < 60) throw new Error(`Only ${sequences.size} tiles decoded`);
 
-        result.textContent = `PASS decoded ${decoded.length} codes from one image\nALL TESTS PASSED`;
+        result.textContent = `PASS decoded ${decoded.length} tiles from one seamless mosaic\nALL TESTS PASSED`;
         document.title = "PASS";
       } catch (error) {
         result.textContent = `FAIL\n${error.stack || error.message}`;

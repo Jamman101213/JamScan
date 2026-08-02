@@ -82,7 +82,7 @@
     }
 
     if (!state.session) {
-      element("scanMessage").textContent = "Point the camera at one or more JamScan codes.";
+      element("scanMessage").textContent = "Point the camera at the complete 64-tile JamScan mosaic.";
     } else if (getMissingCount()) {
       element("scanMessage").textContent = `Receiving stream ${state.session.streamId.toString(16).padStart(8, "0")}. Repair frames can replace missed flashes.`;
     } else {
@@ -145,7 +145,7 @@
   }
 
   // Receive code
-  async function processFrame(frame) {
+  async function processFrame(frame, deferUI = false) {
     const newStream = !state.session || state.session.streamId !== frame.streamId;
     if (newStream) beginSession(frame);
 
@@ -158,8 +158,8 @@
     if (metadataChanged) {
       state.rejected += 1;
       element("scanBadge").textContent = "Stream metadata changed";
-      updateScanUI();
-      return;
+      if (!deferUI) updateScanUI();
+      return false;
     }
 
     trackSequence(frame.sequence);
@@ -169,15 +169,16 @@
     if (state.session.decoder.framesNew === before) {
       state.duplicates += 1;
       element("scanBadge").textContent = `Duplicate code ${frame.sequence}`;
-      updateScanUI();
-      return;
+      if (!deferUI) updateScanUI();
+      return false;
     }
 
     state.valid += 1;
     element("scanBadge").textContent = `Code ${frame.sequence} received`;
-    updateScanUI();
+    if (!deferUI) updateScanUI();
 
     if (state.session.decoder.isComplete) await finishScan();
+    return true;
   }
 
   // Finish package
@@ -215,7 +216,7 @@
 
     if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false;
 
-    const maximumSide = 960;
+    const maximumSide = 1280;
     const scale = Math.min(1, maximumSide / Math.max(video.videoWidth, video.videoHeight));
     const width = Math.max(1, Math.round(video.videoWidth * scale));
     const height = Math.max(1, Math.round(video.videoHeight * scale));
@@ -266,16 +267,26 @@
     try {
       if (drawCameraImage()) {
         const started = performance.now();
-        const frames = core.sampleFramesFromCanvas(element("sampleCanvas"), state.lockCorners, 4);
+        const frames = core.sampleFramesFromCanvas(element("sampleCanvas"), state.lockCorners, 64);
         state.lastDecodeMs = performance.now() - started;
-        state.lockCorners = frames.map(frame => frame.corners);
+        state.lockCorners = frames[0]?.mosaicCorners
+          ? [frames[0].mosaicCorners]
+          : frames.map(frame => frame.corners);
         state.lockFailures = 0;
         state.codesLast = frames.length;
         drawLocks(frames);
 
+        let added = 0;
         for (const frame of frames) {
-          await processFrame(frame);
+          if (await processFrame(frame, true)) added += 1;
           if (state.complete) break;
+        }
+
+        if (!state.complete) {
+          element("scanBadge").textContent = added
+            ? `${added} new codes received from this mosaic`
+            : "Mosaic locked - waiting for new codes";
+          updateScanUI();
         }
       }
     } catch (error) {
@@ -423,7 +434,7 @@
 
     element("cameraPlaceholder").classList.add("hidden");
     element("cameraButton").textContent = "Stop camera";
-    element("scanBadge").textContent = "Find the JamScan codes";
+    element("scanBadge").textContent = "Find the complete JamScan mosaic";
 
     await loadCameras();
     updateScanUI();
@@ -463,7 +474,7 @@
     state.lastRejectTime = 0;
     element("scanPreviewHost").innerHTML = "";
     updateScanUI();
-    element("scanBadge").textContent = state.stream ? "Find the JamScan codes" : "Ready to scan";
+    element("scanBadge").textContent = state.stream ? "Find the complete JamScan mosaic" : "Ready to scan";
 
     if (state.stream && !state.running) startScanLoop();
   }
@@ -481,16 +492,19 @@
     bitmap.close();
 
     const started = performance.now();
-    const frames = core.sampleFramesFromCanvas(canvas, state.lockCorners, 4);
+    const frames = core.sampleFramesFromCanvas(canvas, state.lockCorners, 64);
     state.lastDecodeMs = performance.now() - started;
-    state.lockCorners = frames.map(frame => frame.corners);
+    state.lockCorners = frames[0]?.mosaicCorners
+      ? [frames[0].mosaicCorners]
+      : frames.map(frame => frame.corners);
     state.lockFailures = 0;
     state.codesLast = frames.length;
     drawLocks(frames);
 
-    for (const frame of frames) await processFrame(frame);
+    let added = 0;
+    for (const frame of frames) if (await processFrame(frame, true)) added += 1;
     updateScanUI();
-    ui.showToast(`${frames.length} code${frames.length === 1 ? "" : "s"} read`);
+    ui.showToast(`${added} new code${added === 1 ? "" : "s"} read from ${frames.length} visible tiles`);
   }
 
   // Start page

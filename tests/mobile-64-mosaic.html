@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JamScan mobile 64-tile test</title>
+  <style>
+    body{margin:0;padding:12px;font-family:system-ui;background:#fff;color:#111}
+    canvas{display:block;width:100%;height:auto;aspect-ratio:1;background:#fff;image-rendering:pixelated}
+    pre{white-space:pre-wrap}
+  </style>
+  <script src="../assets/js/fountain.js"></script>
+  <script src="../assets/js/core.js"></script>
+</head>
+<body>
+  <pre id="result">RUNNING</pre>
+  <canvas id="view" width="1080" height="1080"></canvas>
+  <script>
+    (async () => {
+      const core = window.JamScanCore;
+      const built = await core.buildPackage(core.textEncoder.encode("mobile mosaic test"), "test.txt", "text/plain");
+      const stream = core.createStream(built.bytes);
+      const frames = Array.from({length:64}, (_, sequence) => core.createFountainFrame(stream, sequence));
+      core.renderFrameGrid(document.getElementById("view"), frames);
+      const decoded = core.sampleFramesFromCanvas(document.getElementById("view"), [], 64);
+      document.getElementById("result").textContent = decoded.length === 64
+        ? "PASS: all 64 seamless tiles fit and decode"
+        : `FAIL: decoded ${decoded.length}`;
+    })().catch(error => {
+      document.getElementById("result").textContent = `FAIL: ${error.message}`;
+    });
+  </script>
+</body>
+</html>

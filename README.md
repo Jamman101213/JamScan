@@ -1,61 +1,53 @@
 # JamScan
 
-JamScan is an open source browser project for sharing text and files as animated black-and-white dot streams or portable `.jscan` files.
+JamScan is an open source browser project for sharing text and files through animated black-and-white optical mosaics or portable `.jscan` files.
 
 JamScan runs locally in the browser. It does not require an account, upload server, paid API, external framework, or build step.
 
 ## Main features
 
-- One, two, or four independently changing codes in each visual flash
-- Rateless repair frames that recover from missed camera frames
-- Mid-stream joining with no start-marker wait
-- Automatic code finding, rotation correction, and perspective correction
-- Camera decoding through `requestVideoFrameCallback` when supported
+- A seamless 8 by 8 mosaic containing 64 independently useful repair tiles
+- No internal divider lines between tiles
+- Four strong corner markers used to find the complete mosaic
+- Rateless repair frames that recover from missed camera images
+- Mid-stream joining with no required first frame
+- Rotation, mirroring, and perspective correction
 - `.jscan` save and open support
-- SHA-256 package verification and CRC-32 visual-frame checks
+- SHA-256 package verification and CRC-32 tile checks
 - Mobile, desktop, tablet, and supported VR layouts
 - A warning before recovered content is shown
 
 ## Pages
 
 - `/` - Start page and navigation
-- `/make/` - Create a `.jscan` file and animated stream
-- `/scan/` - Scan a stream with a camera
+- `/make/` - Create a `.jscan` file and animated mosaic
+- `/scan/` - Scan a mosaic with a camera
 - `/open/` - Open and verify a saved `.jscan` file
 
 ## Project structure
 
 ```text
-JamScan_Open_Source/
+JamScan_Open_Source_64_Mosaic/
   index.html
-  make/
-    index.html
-  scan/
-    index.html
-  open/
-    index.html
-  assets/
-    css/
-      styles.css
-    js/
-      common.js
-      core.js
-      device.js
-      fountain.js
-      home.js
-      make.js
-      open.js
-      scan.js
-      viewer.js
-  docs/
-    ATTRIBUTION.md
-    FORMAT.md
-    LEGAL_NOTES.md
-  licenses/
-    DECIMEN-MIT.txt
-  tests/
-    optical-roundtrip.html
-    protocol-roundtrip.cjs
+  make/index.html
+  scan/index.html
+  open/index.html
+  assets/css/styles.css
+  assets/js/common.js
+  assets/js/core.js
+  assets/js/device.js
+  assets/js/fountain.js
+  assets/js/home.js
+  assets/js/make.js
+  assets/js/open.js
+  assets/js/scan.js
+  assets/js/viewer.js
+  docs/ATTRIBUTION.md
+  docs/FORMAT.md
+  docs/LEGAL_NOTES.md
+  licenses/DECIMEN-MIT.txt
+  tests/optical-roundtrip.html
+  tests/protocol-roundtrip.cjs
   CONTRIBUTING.md
   CREDITS.md
   LICENSE
@@ -66,7 +58,7 @@ JamScan_Open_Source/
 
 ## Run locally
 
-Camera access normally needs HTTPS or localhost. Opening the HTML files directly still supports making and opening `.jscan` files, but camera access may be blocked.
+Camera access normally requires HTTPS or localhost.
 
 From the project folder, run:
 
@@ -88,67 +80,55 @@ npx serve .
 
 ## Device support
 
-JamScan automatically chooses a layout:
+JamScan automatically selects mobile or desktop layout. Supported VR browsers use desktop layout. Unsupported televisions, consoles, casting devices, bots, and unknown platforms show `JSCAN-DEVICE-001`. Browsers missing required APIs show `JSCAN-CAPABILITY-002`.
 
-- Phones use mobile mode and default to two codes per flash.
-- Tablets use mobile mode and default to two codes per flash.
-- Windows, macOS, Linux, and ChromeOS use desktop mode and default to four codes per flash.
-- Meta Quest, Oculus Browser, PICO, and similar VR browsers use desktop mode.
-- TVs, consoles, casting devices, bots, and unknown platforms show `JSCAN-DEVICE-001`.
-- Browsers missing required APIs show `JSCAN-CAPABILITY-002`.
+The 64-tile mosaic is the default on phones, tablets, computers, and supported VR headsets.
 
-Responsive CSS still adjusts the page when the window size changes.
+## How the 64-tile mosaic works
 
-## Supported content
+Each display update contains an 8 by 8 group of data tiles. The tiles touch directly, so there are no white or black divider lines between them. Four separate corner markers surround the tile area and let the scanner find the full square once.
 
-JamScan can package plain text, photos, GIF files, video files, audio files, and other file types.
+After the scanner locks onto the four corner markers, it corrects the complete mosaic as one surface. It then samples the 64 known tile positions instead of searching the camera image for 64 separate QR-style borders.
 
-Unknown files are not executed or embedded as active content. They can only be downloaded after the warning is accepted.
+Every tile contains its own sequence number, stream metadata, CRC-protected header, repair payload, and repair-payload CRC. A damaged tile can be skipped while clean tiles from the same camera image are still accepted.
 
-## Faster visual transfer
+## Speed and reliability
 
-Each display update can contain up to four separate JamScan codes. Each code has its own sequence number and repair payload, so one camera image can contribute as many as four useful frames.
+The default setting displays 64 repair tiles per mosaic at 10 mosaics per second. This targets up to 640 useful repair codes per second before camera losses.
 
-The visual protocol uses a continuous rateless stream instead of a fixed numbered loop. Every code contains enough metadata to identify the stream, so the scanner can join at any point. Some codes carry a direct source block. Other codes carry an XOR combination of source blocks. The decoder uses robust-soliton LT repair codes until every source block is recovered.
+Ten mosaics per second is intentionally slower than the old flashing mode. Phone cameras need enough exposure time to capture one complete mosaic without mixing two display updates. The larger number of tiles makes the total transfer faster even with the slower visual update rate.
 
-A missed camera frame is reported as a sequence gap, but the transfer does not wait for that exact code to return. Later repair codes can replace the lost information.
+For best results:
 
-The Make page supports:
+- Use Full-screen display on the sending device.
+- Keep all four corner markers visible.
+- Make the mosaic fill most of the receiving camera view.
+- Increase sender brightness and avoid glare.
+- Hold both devices still until the scanner locks.
+- Use the 8 mosaics per second setting in difficult lighting.
 
-- 1 code per flash for maximum camera readability
-- 2 codes per flash for small screens and phones
-- 4 codes per flash for the highest throughput on larger screens
+At very low camera resolution, only some of the 64 tiles may decode. This is expected and does not stop the transfer. Later mosaics provide additional repair tiles.
 
-## Speed limits
+## Repair stream
 
-The Recommended setting targets about 24 visual flashes per second. With four codes per flash, that is a target of about 96 code frames per second before camera losses and decoding limits.
+JamScan uses a continuous LT fountain stream. Every sequence number deterministically selects source blocks and combines them into a repair payload. The receiver can begin on any mosaic and continue until all source blocks are solved.
 
-Display maximum advances once per browser display refresh. It cannot create a separately visible one-millisecond flash when the screen, browser, or camera does not support that rate. A 60 Hz screen normally presents at most about 60 unique display updates per second.
+A missed camera image does not require waiting for that exact image to repeat. Later repair tiles can replace the missing information.
 
-Transfer speed depends on:
-
-- Sender screen refresh rate
-- Receiver camera frame rate
-- Screen brightness and glare
-- Code size in the camera view
-- Autofocus movement
-- Browser and phone processing speed
-- Selected codes per flash
-
-For four-code mode, use fullscreen and keep the complete grid visible. If the camera struggles, switch to two codes or one code.
+The fountain implementation is adapted from Decimen Optical Transfer under the MIT License. JamScan uses its own `.jscan` package, visual tile format, mosaic layout, scanner, interface, and safety flow. The visual formats are not compatible.
 
 ## Safety model
 
 Before recovered content is shown, JamScan displays a warning covering inappropriate content, scams, misleading links, impersonation, malware, and unsafe downloads.
 
-The warning is not a guarantee that the file is safe. JamScan only checks package integrity.
+The warning is not a guarantee that a file is safe. JamScan checks integrity, not trustworthiness.
 
 ## Integrity checks
 
 - Every package stores a SHA-256 hash of its original payload.
-- Every visual code stores a CRC-32 value for its repair payload.
-- Every visual code includes a CRC-32-protected header.
-- The full `.jscan` package has a CRC-32 value in the visual stream.
+- Every tile stores a CRC-32 value for its repair payload.
+- Every tile includes a CRC-32-protected header.
+- The complete `.jscan` package has a CRC-32 value in the optical stream.
 - Duplicate sequence numbers are ignored.
 - Recovered packages must pass length, CRC-32, and SHA-256 checks.
 
@@ -160,11 +140,13 @@ Run the dependency-free Node test:
 node tests/protocol-roundtrip.cjs
 ```
 
-It checks:
+The test checks:
 
-- Rotation handling
-- Four codes decoded from one image
-- Fountain recovery after simulated code loss
+- Legacy single-code rotation handling
+- All 64 mosaic tiles at normal camera resolution
+- Rotated mosaic decoding
+- A fully white outside edge
+- Fountain recovery after 35 percent simulated code loss
 - `.jscan` package integrity
 
 A browser test is available at:
@@ -175,40 +157,23 @@ A browser test is available at:
 
 ## Inspiration and credit
 
-JamScan's faster optical mode is inspired by [Decimen Optical Transfer](https://github.com/bashalarmistalt/decimen-optical-transfer/) by BashAlarmist. Decimen demonstrates fountain-coded optical transfer and documents experiments using denser frames and multi-code grids.
+JamScan's fountain-transfer design and dense optical-transfer direction are inspired by [Decimen Optical Transfer](https://github.com/bashalarmistalt/decimen-optical-transfer/) by BashAlarmist.
 
-JamScan keeps its own `.jscan` package, custom dot-grid format, frame wrapper, interface, and safety flow. Its fountain implementation is adapted from Decimen under the MIT License, while the complete JamScan visual stream remains incompatible with Decimen.
-
-Decimen is released under the MIT License. Its required copyright and permission notice are preserved in `licenses/DECIMEN-MIT.txt` and `THIRD_PARTY_NOTICES.md`.
+Decimen is released under the MIT License. Its required notice is preserved in `licenses/DECIMEN-MIT.txt` and `THIRD_PARTY_NOTICES.md`.
 
 See `CREDITS.md` and `docs/ATTRIBUTION.md` for more information.
-
-
-## Mobile four-code display
-
-The complete white JamScan square must be visible to the receiving camera. The scan page no longer places a dark mask or status label over the camera image. On a phone sender, use **Full-screen display** before selecting four codes per flash so all quiet zones and locator borders remain inside the screen.
 
 ## Development note
 
 This release was created and revised with assistance from ChatGPT GPT-5.6 Thinking, which the project author refers to as "5.6 Sol." Claude was not used to generate this release.
 
-Project direction, testing, and product decisions were provided by the JamScan project author.
+Project direction, physical phone testing, and product decisions were provided by the JamScan project author.
 
 ## Large files
 
-The visual stream can transfer large packages, but videos may still take time because the channel is limited by the display and camera. Sending the generated `.jscan` file directly is much faster for large content.
+The visual mosaic can transfer large packages, but sending the generated `.jscan` file directly remains much faster for large videos.
 
 The default source limit is 256 MB. It is defined in `assets/js/core.js` as `MAX_SOURCE_SIZE`.
-
-## Contributing
-
-1. Fork the project.
-2. Create a branch for the change.
-3. Keep comments short and related to the code.
-4. Preserve required third-party notices.
-5. Test the Home, Make, Scan, and Open pages.
-6. Run the protocol test.
-7. Submit a pull request with a clear description.
 
 ## License
 
