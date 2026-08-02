@@ -1,3 +1,12 @@
+# JamScan mobile scanner layout fix
+
+- Removed the dark camera mask that covered the outer parts of four-code streams.
+- Changed the scan guide to a centered square that matches the full JamScan display.
+- Moved scanner status text outside the camera image so it cannot cover a code.
+- Changed the sender container from black to white so the complete locator and quiet zones remain visible.
+- Added a true full-screen white presentation layout for mobile, desktop, and VR.
+- Kept one-code, two-code, and four-code fountain transfer support.
+
 # JamScan fast multi-code release
 
 ## Changes

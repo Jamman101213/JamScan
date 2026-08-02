@@ -183,6 +183,11 @@ Decimen is released under the MIT License. Its required copyright and permission
 
 See `CREDITS.md` and `docs/ATTRIBUTION.md` for more information.
 
+
+## Mobile four-code display
+
+The complete white JamScan square must be visible to the receiving camera. The scan page no longer places a dark mask or status label over the camera image. On a phone sender, use **Full-screen display** before selecting four codes per flash so all quiet zones and locator borders remain inside the screen.
+
 ## Development note
 
 This release was created and revised with assistance from ChatGPT GPT-5.6 Thinking, which the project author refers to as "5.6 Sol." Claude was not used to generate this release.

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JamScan mobile four-code layout test</title>
+  <style>
+    html,body{margin:0;min-height:100%;background:#f4f1ea;font-family:Arial,sans-serif}
+    main{padding:14px}
+    .shell{width:100%;box-sizing:border-box;padding:3px;border:2px solid #171714;border-radius:12px;background:#fff;box-shadow:3px 4px 0 #171714}
+    canvas{display:block;width:100%;height:auto;aspect-ratio:1;background:#fff;image-rendering:pixelated}
+    p{margin:14px 0 0;font-weight:700;text-align:center}
+  </style>
+  <script src="../assets/js/fountain.js"></script>
+  <script src="../assets/js/core.js"></script>
+</head>
+<body>
+  <main>
+    <div class="shell"><canvas id="view" width="960" height="960"></canvas></div>
+    <p id="result">Rendering four complete codes</p>
+  </main>
+  <script>
+    (async () => {
+      const core = window.JamScanCore;
+      const payload = core.textEncoder.encode("JamScan mobile four-code layout test ".repeat(80));
+      const built = await core.buildPackage(payload, "mobile-test.txt", "text/plain");
+      const stream = core.createStream(built.bytes);
+      const frames = [0, 1, 2, 3].map(sequence => core.createFountainFrame(stream, sequence));
+      core.renderFrameGrid(document.getElementById("view"), frames);
+      const decoded = core.sampleFramesFromCanvas(document.getElementById("view"), [], 4);
+      document.getElementById("result").textContent = decoded.length === 4 ? "PASS: all four codes fit and decode" : `FAIL: decoded ${decoded.length}`;
+      document.title = decoded.length === 4 ? "PASS" : "FAIL";
+    })();
+  </script>
+</body>
+</html>

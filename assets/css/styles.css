@@ -667,19 +667,45 @@ textarea {
   width: 100%;
   max-width: 700px;
   margin-inline: auto;
-  padding: 12px;
+  padding: clamp(4px, 1vw, 10px);
   position: relative;
+  overflow: visible;
+  border: 2px solid #171714;
   border-radius: 17px;
-  background: #111111;
+  background: #ffffff;
+  box-shadow: 6px 7px 0 #171714;
 }
 
 #streamCanvas {
   display: block;
   width: 100%;
+  height: auto;
   aspect-ratio: 1;
   border-radius: 9px;
   background: #ffffff;
   image-rendering: pixelated;
+}
+
+.canvas-shell:fullscreen {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.canvas-shell:fullscreen #streamCanvas {
+  width: min(100vw, 100dvh);
+  height: min(100vw, 100dvh);
+  max-width: 100vw;
+  max-height: 100dvh;
+  border-radius: 0;
 }
 
 .canvas-empty {
@@ -690,13 +716,13 @@ textarea {
   place-content: center;
   text-align: center;
   border-radius: 9px;
-  background: radial-gradient(circle at 50% 35%, #3a3a3a, #111111 72%);
-  color: #ffffff;
+  background: #f1eee7;
+  color: #171714;
 }
 
 .canvas-empty span {
   margin-top: 6px;
-  color: #bbbbbb;
+  color: #6e6b63;
   font-size: 0.82rem;
 }
 
@@ -1363,6 +1389,7 @@ body.device-mobile textarea {
 /* Scanner lock */
 .camera-shell {
   aspect-ratio: 4 / 3;
+  overflow: hidden;
 }
 
 .scan-overlay {
@@ -1375,21 +1402,48 @@ body.device-mobile textarea {
 }
 
 .scan-guide {
-  inset: 12% 22%;
+  width: 72%;
+  height: auto;
+  aspect-ratio: 1;
+  inset: auto;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 1;
-  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.12);
+  border-color: rgba(245, 185, 66, 0.95);
+  box-shadow: none;
 }
 
 .scan-badge {
-  z-index: 3;
+  position: static;
+  transform: none;
+  width: fit-content;
+  max-width: 100%;
+  margin: 10px auto 0;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--text);
+  white-space: normal;
+  text-align: center;
 }
 
-@media (max-width: 620px) {
+@media (max-width: 700px) {
+  .canvas-shell {
+    width: 100%;
+    padding: 3px;
+    border-radius: 12px;
+    box-shadow: 3px 4px 0 #171714;
+  }
+
+  #streamCanvas {
+    border-radius: 7px;
+  }
+
   .camera-shell {
-    min-height: 240px;
+    min-height: 0;
   }
 
   .scan-guide {
-    inset: 13% 18%;
+    width: 74%;
   }
 }
