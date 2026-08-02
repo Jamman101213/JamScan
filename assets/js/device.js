@@ -55,41 +55,23 @@
 
     const screen = document.createElement("main");
     screen.className = "device-error";
-    screen.setAttribute("role", "main");
+    screen.innerHTML = `
+      <section class="device-error-card">
+        <div class="device-error-mark">!</div>
+        <h1>${title}</h1>
+        <p>${message}</p>
+        <div class="error-code">${code}</div>
+        <div class="device-details">
+          Type: ${info.type}<br>
+          Platform: ${info.platform}<br>
+          Screen: ${window.screen.width} x ${window.screen.height}<br>
+          Touch points: ${info.touchPoints}<br>
+          Missing: ${missing.length ? missing.join(", ") : "None"}<br>
+          User agent: ${info.ua}
+        </div>
+      </section>`;
 
-    const card = document.createElement("section");
-    card.className = "device-error-card";
-
-    const mark = document.createElement("div");
-    mark.className = "device-error-mark";
-    mark.setAttribute("aria-hidden", "true");
-    mark.textContent = "!";
-
-    const heading = document.createElement("h1");
-    heading.textContent = title;
-
-    const description = document.createElement("p");
-    description.textContent = message;
-
-    const codeBox = document.createElement("div");
-    codeBox.className = "error-code";
-    codeBox.textContent = code;
-
-    const details = document.createElement("div");
-    details.className = "device-details";
-    details.textContent = [
-      `Type: ${info.type}`,
-      `Platform: ${info.platform}`,
-      `Screen: ${window.screen.width} x ${window.screen.height}`,
-      `Touch points: ${info.touchPoints}`,
-      `Missing: ${missing.length ? missing.join(", ") : "None"}`,
-      `User agent: ${info.ua}`
-    ].join("\n");
-
-    card.append(mark, heading, description, codeBox, details);
-    screen.appendChild(card);
     document.body.prepend(screen);
-    heading.focus?.();
   }
 
   // Apply layout
@@ -101,8 +83,13 @@
     document.documentElement.dataset.device = info.type;
     document.documentElement.dataset.layout = info.layout;
 
-    if (info.layout === "mobile") document.body.classList.add("device-mobile");
-    if (info.layout === "desktop") document.body.classList.add("device-desktop");
+    if (info.layout === "mobile") {
+      document.body.classList.add("device-mobile");
+    }
+
+    if (info.layout === "desktop") {
+      document.body.classList.add("device-desktop");
+    }
 
     if (info.type === "unsupported") {
       showDeviceError(
@@ -118,7 +105,7 @@
       showDeviceError(
         "JSCAN-CAPABILITY-002",
         "Browser update required",
-        "This browser is missing features JamScan needs. Update the browser or use a current Chrome, Edge, Firefox, or Safari version.",
+        "This browser is missing features JamScan needs. Update the browser or use a modern Chrome, Edge, Firefox, or Safari version.",
         info,
         missing
       );

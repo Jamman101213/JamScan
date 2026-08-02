@@ -114,10 +114,7 @@
 
     shell.append(heading, area);
     host.appendChild(shell);
-    shell.setAttribute("tabindex", "-1");
-    const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    shell.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
-    shell.focus({ preventScroll: true });
+    shell.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // Dialog events

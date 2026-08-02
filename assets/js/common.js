@@ -3,11 +3,11 @@
 
   // Status message
   function setStatus(elementOrId, message, type = "") {
-    const target = typeof elementOrId === "string" ? document.getElementById(elementOrId) : elementOrId;
-    if (!target) return;
+    const element = typeof elementOrId === "string" ? document.getElementById(elementOrId) : elementOrId;
+    if (!element) return;
 
-    target.textContent = message;
-    target.className = `status-box${type ? ` ${type}` : ""}`;
+    element.textContent = message;
+    element.className = `status-box${type ? ` ${type}` : ""}`;
   }
 
   // Small notification
@@ -80,21 +80,10 @@
     const nav = document.getElementById("siteNav");
     if (!button || !nav) return;
 
-    function closeMenu() {
-      nav.classList.remove("open");
-      button.setAttribute("aria-expanded", "false");
-      button.textContent = "Menu";
-    }
-
     button.addEventListener("click", () => {
       const open = nav.classList.toggle("open");
       button.setAttribute("aria-expanded", String(open));
       button.textContent = open ? "Close" : "Menu";
-    });
-
-    nav.querySelectorAll("a").forEach(link => link.addEventListener("click", closeMenu));
-    document.addEventListener("keydown", event => {
-      if (event.key === "Escape") closeMenu();
     });
   }
 
@@ -109,13 +98,6 @@
     label.textContent = `${type} - ${layout}`;
   }
 
-  // Reduced motion default
-  function applyMotionPreference() {
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      document.documentElement.dataset.reducedMotion = "true";
-    }
-  }
-
   window.JamScanUI = {
     setStatus,
     showToast,
@@ -125,7 +107,6 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     setupMenu();
-    applyMotionPreference();
     setTimeout(setupDeviceLabel, 0);
   });
 })();

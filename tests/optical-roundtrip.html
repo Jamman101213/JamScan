@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>JamScan optical round-trip test</title>
+  <script src="../assets/js/core.js"></script>
+</head>
+<body>
+  <pre id="result">RUNNING</pre>
+  <script>
+    (async () => {
+      const result = document.getElementById("result");
+      try {
+        const core = window.JamScanCore;
+        const payload = core.textEncoder.encode("JamScan optical test data ".repeat(30));
+        const built = await core.buildPackage(payload, "test.txt", "text/plain");
+        const stream = core.createStream(built.bytes);
+        const frames = core.createCycleFrames(stream, 0, { startRepeats: 4, endRepeats: 2, dataRepeats: 1 });
+        const testFrames = [frames[0], frames.find(frame => frame.type === core.FRAME_TYPE.DATA)];
+        const angles = [0, 5, -7, 90];
+        const messages = [];
+
+        for (let index = 0; index < testFrames.length; index += 1) {
+          for (const angle of angles) {
+            const source = document.createElement("canvas");
+            source.width = 720;
+            source.height = 720;
+            core.renderFrame(source, testFrames[index]);
+
+            const camera = document.createElement("canvas");
+            camera.width = 480;
+            camera.height = 360;
+            const context = camera.getContext("2d");
+            context.fillStyle = "#d8d8d8";
+            context.fillRect(0, 0, camera.width, camera.height);
+            context.save();
+            context.translate(camera.width / 2, camera.height / 2);
+            context.rotate(angle * Math.PI / 180);
+            context.drawImage(source, -145, -145, 290, 290);
+            context.restore();
+
+            const decoded = core.sampleFrameFromCanvas(camera);
+            if (decoded.streamId !== testFrames[index].streamId || decoded.sequence !== testFrames[index].sequence) {
+              throw new Error(`Mismatch for frame ${index} at ${angle} degrees`);
+            }
+            messages.push(`PASS frame ${index} angle ${angle}`);
+          }
+        }
+
+        result.textContent = messages.join("\n") + "\nALL TESTS PASSED";
+        document.title = "PASS";
+      } catch (error) {
+        result.textContent = `FAIL\n${error.stack || error.message}`;
+        document.title = "FAIL";
+      }
+    })();
+  </script>
+</body>
+</html>

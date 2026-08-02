@@ -1,17 +1,28 @@
 # JamScan format
 
-This document describes the `.jscan` package and visual protocol used by this version of JamScan.
+JamScan uses two related formats:
+
+- The `.jscan` package stores metadata and the original payload.
+- The visual frame protocol sends that package through animated dot frames.
 
 ## `.jscan` package
 
-A `.jscan` file contains:
+The package uses this order:
 
-1. Six magic bytes: `JSCAN` followed by version byte `1`
-2. A four-byte little-endian JSON metadata length
-3. UTF-8 JSON metadata
-4. Raw payload bytes
+```text
+6 bytes   Magic and package version
+4 bytes   Metadata length, little endian
+N bytes   UTF-8 JSON metadata
+N bytes   Original payload
+```
 
-Metadata fields include:
+The magic bytes are:
+
+```text
+4A 53 43 41 4E 01
+```
+
+The metadata contains:
 
 - `app`
 - `version`
@@ -22,83 +33,89 @@ Metadata fields include:
 - `created`
 - `sha256`
 
-The payload SHA-256 value is checked when a package is opened or reconstructed.
+## Visual grid
 
-## Visual protocol version 3
+Protocol version 3 uses a 72 by 72 displayed grid:
 
-Visual frames use a 48 by 48 data grid inside a 58 by 58 displayed module area.
+```text
+4 cells   White quiet zone
+2 cells   Black locator border
+2 cells   White separator
+56 cells  Data grid
+2 cells   White separator
+2 cells   Black locator border
+4 cells   White quiet zone
+```
 
-The displayed area contains:
+The four 8 by 8 corners of the 56 by 56 data grid are reserved for finder markers. The remaining cells store the frame header and payload bits.
 
-- A white outer margin
-- A solid black locator border
-- A white separator
-- The 48 by 48 data grid
+The black locator border is separated from the data by white cells. This lets the scanner find the square as a connected shape, estimate its four corners, and correct rotation and perspective before reading data.
 
-Four 8 by 8 finder markers occupy the corners of the data grid. The finder cells are reserved and are not part of the byte payload.
+## Visual header version 3
 
-The remaining data area stores 256 bytes. Each frame uses:
+```text
+Byte 0      Magic A5
+Byte 1      Magic 5A
+Byte 2      Protocol version 03
+Byte 3      Frame type
+Bytes 4-6   Data index, little endian
+Bytes 7-9   Total data frame count, little endian
+Bytes 10-11 Payload length, little endian
+Bytes 12-15 Stream ID, little endian
+Bytes 16-19 Cycle number, little endian
+Bytes 20-23 Sequence number, little endian
+Bytes 24-27 Payload CRC-32, little endian
+Bytes 28-31 Header CRC-32, little endian
+```
 
-- 28 bytes for the frame header
-- Up to 224 bytes for the frame payload
+Frame types:
 
-## Frame header
+```text
+0 Start marker
+1 Data frame
+2 End marker
+```
 
-| Offset | Size | Field |
-|---|---:|---|
-| 0 | 2 | Magic bytes `A5 5A` |
-| 2 | 1 | Visual protocol version `3` |
-| 3 | 1 | Frame type |
-| 4 | 3 | Data index |
-| 7 | 3 | Total data-frame count |
-| 10 | 2 | Payload length |
-| 12 | 4 | Stream ID |
-| 16 | 4 | Cycle number |
-| 20 | 4 | Sequence number |
-| 24 | 4 | Payload CRC-32 |
+Start and end markers carry a 12-byte marker payload:
 
-Frame types are:
+```text
+Bytes 0-3   Package length, little endian
+Bytes 4-7   Complete package CRC-32, little endian
+Bytes 8-9   Data block size, little endian
+Byte 10     Protocol version
+Byte 11     Flags
+```
 
-- `0` - Start marker
-- `1` - Data frame
-- `2` - End marker
+Data frames carry up to 320 package bytes.
 
-Start and end markers carry an eight-byte payload:
-
-- Four-byte complete package length
-- Four-byte complete package CRC-32
-
-## Loop order
+## Loop rules
 
 Each loop contains:
 
-1. Three start markers
-2. Every data frame, each displayed twice
-3. Two end markers
+1. A visible start-marker period
+2. Every data frame
+3. An end-marker period
 
-Later loops begin at a different data index. This changes the order and helps recover frames missed because of display and camera timing.
+The Make page calculates the marker repeat count from the selected frame rate. The start marker remains visible for about 0.7 seconds so a camera that begins in the middle can reliably lock onto the next loop.
+
+The scanner does not accept data until it reads a valid start marker. It stores data by its data index, so duplicate frames are ignored and later loops can fill missing indexes.
+
+Sequence gaps are counted as missed flashes. A cycle change without a start marker makes the scanner wait for the next valid start marker.
+
+Small streams repeat their data frames within the same cycle. This improves short transfers where missing one of only a few frames would otherwise force another full loop.
 
 ## Scanner rules
 
-- Data frames are ignored until a valid start marker is received.
-- A repeated start marker may begin a session even if the first start marker was missed.
-- Sequence gaps count missed displayed frames.
-- Duplicate data indexes are ignored.
-- Missing data remains stored across later loops.
-- A new cycle is not accepted until its start marker is received.
-- Every frame payload must pass CRC-32.
-- The reconstructed package must match its expected length and package CRC-32.
-- The final `.jscan` payload must pass SHA-256.
-
-## Image decoding
-
 The scanner:
 
-- Searches several centered crop sizes and offsets
-- Remembers the last successful crop
-- Uses the locator border for contrast and alignment checks
-- Tries four rotations
-- Tries mirrored and non-mirrored orientations
-- Uses a global threshold based on sampled dark and light modules
+1. Finds the separate black locator border.
+2. Estimates the four corners of the square.
+3. Corrects scale, rotation, and perspective.
+4. Samples the 56 by 56 data grid.
+5. Tries normal, rotated, and mirrored directions.
+6. Checks the finder pattern.
+7. Checks the header CRC-32.
+8. Checks the payload CRC-32.
+9. Applies the start, data, and end sequence rules.
 
-The current decoder does not perform full perspective correction. The camera and source display should remain roughly parallel.
+After a successful lock, the previous corner positions are tried first on the next camera frame. A full image search is only needed again when the lock is lost.

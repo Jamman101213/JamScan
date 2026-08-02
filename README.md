@@ -1,16 +1,16 @@
 # JamScan
 
-JamScan is an open source browser project for sharing text and files as camera-readable black-and-white dot streams or portable `.jscan` files.
+JamScan is an open source browser project for sharing text and files as animated black-and-white dot streams or portable `.jscan` files.
 
-Everything runs locally in the browser. JamScan does not require an account, upload server, paid API, external framework, package installation, or build step.
+JamScan runs locally in the browser. It does not require an account, upload server, paid API, external framework, or build step.
 
 ## Pages
 
 - `/` - Start page and navigation
-- `/make/` - Create a `.jscan` file and visual stream
-- `/scan/` - Scan a visual stream with a camera
+- `/make/` - Create a `.jscan` file and animated dot stream
+- `/scan/` - Scan an animated stream with a camera
 - `/open/` - Open and verify a saved `.jscan` file
-- `/accessibility/` - Accessibility statement and testing guidance
+- `/tests/optical-roundtrip.html` - Browser optical round-trip test
 
 ## Project structure
 
@@ -22,8 +22,6 @@ JamScan_Open_Source/
   scan/
     index.html
   open/
-    index.html
-  accessibility/
     index.html
   assets/
     css/
@@ -39,20 +37,23 @@ JamScan_Open_Source/
       viewer.js
   docs/
     FORMAT.md
+    INDEPENDENT_IMPLEMENTATION.md
+    LEGAL_NOTES.md
   tests/
-    index.html
-    protocol.js
-    protocol-node.js
-  ACCESSIBILITY.md
-  LEGAL.md
+    optical-roundtrip.html
+    protocol-roundtrip.cjs
+  .gitignore
+  CONTRIBUTING.md
   LICENSE
-  package.json
   README.md
+  THIRD_PARTY_NOTICES.md
 ```
 
 ## Run locally
 
-Camera access normally requires HTTPS or localhost. From the project folder, run:
+Camera access normally needs HTTPS or localhost. Opening the HTML files directly still supports making and opening `.jscan` files, but camera access may be blocked.
+
+From the project folder, run:
 
 ```bash
 python -m http.server 8000
@@ -64,82 +65,11 @@ Then open:
 http://localhost:8000/
 ```
 
-You can also use:
+Another option is:
 
 ```bash
 npx serve .
 ```
-
-Or use the included script:
-
-```bash
-npm run serve
-```
-
-Opening the HTML files directly still supports making and opening `.jscan` files, but camera access may be blocked by the browser.
-
-## Scanner improvements
-
-Visual protocol version 3 was designed for real phone cameras rather than perfect screenshots.
-
-- The code grid was reduced from 64 by 64 to 48 by 48 modules.
-- Every frame has a white margin and solid locator border.
-- The scanner searches several centered crop sizes instead of requiring one exact crop.
-- The decoder tries rotated and mirrored versions automatically.
-- The scanner remembers a successful crop and tries it first on later camera frames.
-- Every data frame is displayed twice.
-- Start and end markers are repeated.
-- A scan started in the middle waits for the next start marker.
-- Sequence gaps are counted as missed flashes.
-- Missing data is preserved and filled during later loops.
-- Duplicate data frames are ignored.
-- CRC-32 checks reject damaged visual frames.
-- SHA-256 verifies the recovered payload.
-
-For the best result, keep both devices parallel, keep the full border and white margin visible, increase the source display brightness, and avoid glare.
-
-## Stream rate and motion safety
-
-JamScan does not promise one-millisecond visible flashes. Browsers, displays, and cameras cannot reliably show and capture separate frames at that rate.
-
-The Make page includes these rates:
-
-- Reduced motion: 1 frame per second
-- Reliable: 2 frames per second
-- Quick: 3 frames per second
-
-The stream does not autoplay. A photosensitivity warning appears before it starts, playback stops when the tab becomes hidden, and users who request reduced motion receive the 1 fps default.
-
-The `.jscan` file route is the nonvisual and nonflashing alternative.
-
-## Accessibility
-
-JamScan aims for WCAG 2.2 Level AA where the project can reasonably apply it. Included work covers:
-
-- Semantic headings and landmarks
-- Skip links
-- Keyboard-accessible controls and drop areas
-- Visible keyboard focus
-- Form labels and dialog labels
-- Polite status announcements
-- Reduced-motion support
-- High-contrast and forced-colors support
-- No autoplaying visual stream
-- A nonvisual `.jscan` transfer route
-- An accessibility statement and manual test routine
-
-Read `ACCESSIBILITY.md` for the known limitation and test checklist.
-
-Accessibility work does not guarantee legal compliance. Automated testing is not enough. Production use should include manual keyboard testing, screen-reader testing, zoom and contrast checks, testing with disabled users, and legal advice when needed.
-
-Official references used for the project review:
-
-- WCAG 2.2 overview: https://www.w3.org/WAI/standards-guidelines/wcag/
-- W3C accessibility checks: https://www.w3.org/WAI/test-evaluate/easy-checks/
-- W3C evaluation overview: https://www.w3.org/WAI/test-evaluate/
-- W3C keyboard guidance: https://www.w3.org/WAI/WCAG21/Understanding/keyboard.html
-- W3C flashing guidance: https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html
-- United States DOJ web accessibility guidance: https://www.ada.gov/resources/web-guidance/
 
 ## Device support
 
@@ -167,22 +97,88 @@ JamScan can package:
 
 Unknown files are not executed or embedded as active content. They can only be downloaded after the warning is accepted.
 
+## Scanner improvements
+
+Protocol version 3 fixes the earlier scanner that required a perfectly centered square.
+
+The new scanner:
+
+- Adds a white quiet zone around every code.
+- Adds a separate black locator border.
+- Searches the complete camera image instead of one fixed center crop.
+- Finds the four corners of the square automatically.
+- Corrects rotation and perspective before reading dots.
+- Supports rotated and mirrored grid directions.
+- Uses a header CRC and a payload CRC for every frame.
+- Reuses the last detected corner positions for faster later frames.
+- Requests a high camera frame rate and falls back when the device refuses it.
+- Requests continuous focus when the camera supports it.
+- Uses `requestVideoFrameCallback` when available.
+
+Keep the complete white margin and black border visible. Maximum screen brightness and a steady camera improve results.
+
+## Visual stream behavior
+
+The visual protocol uses three frame types:
+
+1. Start markers identify the stream and package.
+2. Data frames carry numbered pieces of the package.
+3. End markers close the current loop.
+
+The scanner waits for a valid start marker before accepting data. If scanning begins in the middle, it recognizes the stream but waits for the next start period.
+
+The Make page holds the start marker for about 0.7 seconds at every speed. Small transfers repeat their data frames in the same cycle. Later cycles keep any data already received and fill the missing indexes.
+
+Each frame has a stream ID, cycle number, sequence number, data index, header CRC, and payload CRC. Sequence gaps are counted as missed flashes. Duplicate frames are ignored.
+
+## Speed limits
+
+The Make page includes Reliable, Fast, Very fast, and Display maximum modes.
+
+Display maximum advances once per browser animation frame. A browser cannot display a separate image faster than the physical display refresh rate. A 60 Hz display can normally show about 60 unique frames per second and a 120 Hz display can normally show about 120.
+
+The camera also has its own exposure and frame-rate limit. A requested one-millisecond interval does not create one thousand visible camera-readable flashes per second.
+
+Reliable or Fast mode is recommended for real transfers. Display maximum is mainly for testing high-refresh screens and fast cameras.
+
 ## Safety model
 
-Before recovered content is shown, JamScan displays a warning covering:
+Before recovered content is shown, JamScan displays a warning that covers:
 
 - Inappropriate or disturbing content
 - Scams and fake offers
 - Misleading links and impersonation
 - Malware and unsafe downloads
 
-The warning is not proof that a file is safe. JamScan checks package integrity, not truth, legality, moderation, or malware.
+The warning is not a guarantee that the file is safe. JamScan only checks package integrity.
+
+## Integrity checks
+
+- Every package stores a SHA-256 hash of its payload.
+- Every visual frame stores a header CRC-32 value.
+- Every visual frame stores a payload CRC-32 value.
+- The complete visual package stores a CRC-32 value.
+- Duplicate frames are ignored during scanning.
+- Missing frames remain listed until a later loop supplies them.
+- Incomplete or corrupted packages fail verification.
 
 ## Large files
 
-A visual stream requires many frames. Large videos may take a long time to scan. Sending the generated `.jscan` file is much faster and more reliable for large content.
+The visual stream uses many frames. Large videos can take a long time to scan through a camera. Sharing the generated `.jscan` file is much faster for large content.
 
 The default source limit is 256 MB. It is defined in `assets/js/core.js` as `MAX_SOURCE_SIZE`.
+
+## Independent implementation
+
+JamScan is independently written and does not include another optical-transfer project's source code.
+
+Read:
+
+- `docs/INDEPENDENT_IMPLEMENTATION.md`
+- `docs/LEGAL_NOTES.md`
+- `THIRD_PARTY_NOTICES.md`
+
+These records reduce confusion about code origin but do not guarantee that a legal claim can never be made.
 
 ## Development
 
@@ -190,24 +186,11 @@ The project uses plain HTML, CSS, and JavaScript. Java is not required.
 
 No dependency installation is needed.
 
-Run the protocol tests with:
-
-```bash
-npm test
-```
-
-The Node test uses a small built-in pixel canvas and checks package round trips, rotation, mirroring, camera-style crops, and later-loop recovery.
-
-When changing the visual protocol, update both frame creation and frame scanning in `assets/js/core.js`. Format details are in `docs/FORMAT.md`.
+When changing the visual format, update both frame creation and frame scanning in `assets/js/core.js`. Format details are in `docs/FORMAT.md`.
 
 ## Contributing
 
-1. Fork the project.
-2. Create a branch for the change.
-3. Keep comments short and related to the code.
-4. Test Home, Make, Scan, Open, and Accessibility.
-5. Test keyboard navigation and reduced motion.
-6. Submit a pull request with a clear description.
+Read `CONTRIBUTING.md` before submitting changes.
 
 ## License
 
