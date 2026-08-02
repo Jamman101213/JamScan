@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f1ea">
+  <title>Quick Receive - JamScan</title>
+  <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../../">JamScan</a>
+    <nav class="nav">
+      <a href="../../">Home</a>
+      <a href="../send/">Quick Send</a>
+      <a class="active" href="./">Quick Receive</a>
+      <a href="../../receive/">Optical</a>
+      <a href="../../open/">Open .jscan</a>
+    </nav>
+  </header>
+  <main class="page">
+    <section class="card quick-receive-card">
+      <div class="eyebrow">One-scan pairing</div>
+      <h1 class="page-title">Quick Receive</h1>
+      <p class="muted">Keep this page open while JamScan establishes the direct connection. You do not need to point the camera at an animated code.</p>
+      <div id="receive-pair-status" class="connection-panel">
+        <div class="connection-pulse"></div>
+        <div><strong id="quick-receive-heading">Reading pairing link</strong><span id="quick-receive-message">Checking the session information.</span></div>
+      </div>
+      <div class="progress-track"><div id="quick-receive-progress" class="progress-bar"></div></div>
+      <div class="metrics quick-metrics">
+        <div class="metric"><span>Connection</span><strong id="quick-receive-connection">Connecting</strong></div>
+        <div class="metric"><span>Incoming file</span><strong id="quick-receive-name">-</strong></div>
+        <div class="metric"><span>Received</span><strong id="quick-received">0 B</strong></div>
+        <div class="metric"><span>Speed</span><strong id="quick-receive-speed">-</strong></div>
+        <div class="metric"><span>Remaining</span><strong id="quick-receive-eta">-</strong></div>
+        <div class="metric"><span>Route</span><strong id="quick-receive-route">-</strong></div>
+      </div>
+      <div class="button-row">
+        <button id="cancel-quick-receive" class="button danger" type="button">Cancel</button>
+      </div>
+      <div id="quick-receive-error" class="status" hidden></div>
+    </section>
+    <section id="quick-preview" class="card preview" hidden></section>
+  </main>
+  <footer>The content warning appears only after the complete package passes its size and hash checks.</footer>
+  <script type="module" src="../../src/quick-receive.js"></script>
+</body>
+</html>

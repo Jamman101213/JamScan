@@ -1,21 +1,17 @@
-# Release notes
+# JamScan 3.0.0
 
-## JamScan 2.2
+## Quick Transfer
 
-- Keeps Standard one-QR mode as the default.
-- Adds Double mode with two different QR packets per update.
-- Adds Quad mode with four different QR packets per update.
-- Makes the receiver request and process up to four QR symbols per camera image.
-- Changes the default camera request from 1280 to 1920 pixels for multi-QR use.
-- Updates time and raw-rate estimates to include the selected QR channel count.
-- Keeps tiny static messages in one QR for reliability.
-- Adds automated four-channel fountain recovery tests.
+- Added one-scan QR pairing.
+- Added an in-memory WebSocket signaling server.
+- Added encrypted peer-to-peer WebRTC file transfer.
+- Added 32 KiB binary chunks and data-channel backpressure.
+- Added live speed, progress, ETA, and connection-route reporting.
+- Added receiver verification and the existing safety warning.
+- Added automatic LAN-origin suggestions for local testing.
+- Added optional TURN configuration.
+- Added Docker deployment support.
 
-## 2.2.1 scanner recovery fix
+## Compatibility
 
-- Restored the known-working single-QR full-image decode path.
-- Removed protocol filtering from the QR worker.
-- Replaced the unreliable multi-symbol call with normal one-QR crop scans.
-- Added overlapping half and quadrant searches for Double and Quad.
-- Changed mobile-friendly defaults to 1280 capture, 30 FPS, and two workers.
-- Added worker error reporting and old-generation protection.
+Both devices must use JamScan 3.0 for Quick Transfer. The optical mode remains compatible with the previous JamScan optical protocol.

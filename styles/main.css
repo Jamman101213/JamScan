@@ -174,3 +174,91 @@ body.fullscreen-stream .stream-details, body.fullscreen-stream .stream-card > h2
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions .button { width: 100%; }
 }
+
+/* quick transfer */
+.page-title {
+  font-size: clamp(2.8rem, 7vw, 5.4rem);
+  margin: 12px 0 16px;
+}
+.quick-layout { grid-template-columns: minmax(320px, 0.82fr) minmax(420px, 1.18fr); }
+.quick-pair-card { text-align: center; }
+.quick-pair-card > .muted { max-width: 650px; margin-left: auto; margin-right: auto; }
+#pairing-qr {
+  display: block;
+  width: min(100%, 560px);
+  height: auto;
+  margin: 18px auto 0;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  image-rendering: pixelated;
+}
+.pairing-placeholder {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  margin-top: 18px;
+  padding: 30px;
+  border: 2px dashed var(--line);
+  border-radius: 18px;
+  background: white;
+  color: var(--muted);
+}
+.pair-code {
+  display: inline-grid;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.pair-code span { color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 850; }
+.pair-code strong { font: 900 1.45rem/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.14em; }
+.center-row { justify-content: center; }
+.quick-metrics { grid-template-columns: repeat(3, 1fr); }
+.field-help { color: var(--muted); line-height: 1.4; }
+.check-row {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 15px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.check-row input { margin-top: 3px; accent-color: var(--ink); }
+.quick-receive-card { max-width: 900px; margin: 0 auto; }
+.connection-panel {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: white;
+}
+.connection-panel strong, .connection-panel span { display: block; }
+.connection-panel span { margin-top: 4px; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+.connection-pulse {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(243, 180, 60, 0.55);
+  animation: connection-pulse 1.5s infinite;
+}
+@keyframes connection-pulse {
+  70% { box-shadow: 0 0 0 12px rgba(243, 180, 60, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(243, 180, 60, 0); }
+}
+
+@media (max-width: 850px) {
+  .quick-layout { grid-template-columns: 1fr; }
+  .pairing-placeholder { min-height: 240px; }
+}
+@media (max-width: 560px) {
+  .quick-metrics { grid-template-columns: 1fr 1fr; }
+  .quick-pair-card { padding-left: 12px; padding-right: 12px; }
+}

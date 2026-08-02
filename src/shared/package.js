@@ -1,3 +1,5 @@
+import { sha256HexFallback } from "./sha256.js";
+
 const MAGIC = new TextEncoder().encode("JSCAN2");
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -35,9 +37,13 @@ export function safeName(name) {
 }
 
 export async function sha256Hex(bytes) {
-  const input = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const hash = await crypto.subtle.digest("SHA-256", input);
-  return [...new Uint8Array(hash)].map((value) => value.toString(16).padStart(2, "0")).join("");
+  const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (globalThis.crypto?.subtle) {
+    const copy = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+    const hash = await crypto.subtle.digest("SHA-256", copy);
+    return [...new Uint8Array(hash)].map((value) => value.toString(16).padStart(2, "0")).join("");
+  }
+  return sha256HexFallback(input);
 }
 
 async function gzip(bytes) {

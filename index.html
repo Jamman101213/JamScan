@@ -12,23 +12,25 @@
     <a class="brand" href="./">JamScan</a>
     <nav class="nav">
       <a class="active" href="./">Home</a>
-      <a href="./send/">Send</a>
-      <a href="./receive/">Receive</a>
+      <a href="./quick/send/">Quick Send</a>
+      <a href="./quick/receive/">Quick Receive</a>
+      <a href="./send/">Optical</a>
       <a href="./open/">Open .jscan</a>
     </nav>
   </header>
   <main class="page">
     <section class="hero">
-      <div class="eyebrow">Screen to camera file transfer</div>
-      <h1>Move files with light.</h1>
-      <p class="lead">JamScan turns a file into an endless stream of standard QR codes. A second device can start scanning at any point and recover the file without a network connection between the devices.</p>
+      <div class="eyebrow">Scan once, transfer at network speed</div>
+      <h1>Pair with QR.<br>Send through Wi-Fi.</h1>
+      <p class="lead">JamScan Quick Transfer uses one simple static QR to pair two devices. The actual photos, videos, text, and files move through an encrypted WebRTC connection instead of being squeezed through the camera.</p>
       <div class="action-grid">
-        <a class="action-card" href="./send/"><strong>Send</strong><span>Choose a file or text and display the animated QR stream.</span></a>
-        <a class="action-card" href="./receive/"><strong>Receive</strong><span>Use a phone camera and rebuild the file from valid QR frames.</span></a>
+        <a class="action-card" href="./quick/send/"><strong>Quick Send</strong><span>Create a temporary pairing QR and transfer megabytes directly between browsers.</span></a>
+        <a class="action-card" href="./quick/receive/"><strong>Quick Receive</strong><span>Normally opened automatically after scanning a sender's pairing QR.</span></a>
+        <a class="action-card" href="./send/"><strong>Offline Optical</strong><span>Use animated QR frames only when the devices cannot make a network connection.</span></a>
         <a class="action-card" href="./open/"><strong>Open .jscan</strong><span>Verify and preview a saved JamScan package.</span></a>
       </div>
     </section>
   </main>
-  <footer>JamScan 2.1. Open source under MIT. Optical engine adapted from Decimen Optical Transfer under MIT.</footer>
+  <footer>JamScan 3.0. Quick Transfer uses WebRTC. The optical fallback includes MIT-licensed work adapted from Decimen Optical Transfer.</footer>
 </body>
 </html>

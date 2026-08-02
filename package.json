@@ -1,15 +1,16 @@
 {
-  "name": "jamscan-optical-transfer",
-  "version": "2.2.1",
+  "name": "jamscan",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "JamScan screen-to-camera file transfer using fountain-coded animated QR codes.",
+  "description": "JamScan QR pairing, WebRTC file transfer, and optical QR fallback.",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "node server.mjs",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0",
-    "test": "node tests/protocol.test.mjs"
+    "start": "node server.mjs --production",
+    "test": "node tests/protocol.test.mjs && node tests/quick-transfer.test.mjs",
+    "check": "node --check server.mjs && node --check src/quick-send.js && node --check src/quick-receive.js"
   },
   "dependencies": {
     "qrcode": "1.5.4",

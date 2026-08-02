@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f1ea">
+  <title>Quick Send - JamScan</title>
+  <link rel="stylesheet" href="../../styles/main.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../../">JamScan</a>
+    <nav class="nav">
+      <a href="../../">Home</a>
+      <a class="active" href="./">Quick Send</a>
+      <a href="../receive/">Quick Receive</a>
+      <a href="../../send/">Optical</a>
+      <a href="../../open/">Open .jscan</a>
+    </nav>
+  </header>
+  <main class="page">
+    <div class="layout quick-layout">
+      <section class="card">
+        <div class="eyebrow">Network-speed transfer</div>
+        <h1 class="page-title">Quick Send</h1>
+        <p class="muted">The QR only pairs the devices. The file itself moves through an encrypted WebRTC data channel.</p>
+
+        <div class="segmented">
+          <button id="quick-file-mode" class="active" type="button">File</button>
+          <button id="quick-text-mode" type="button">Text</button>
+        </div>
+
+        <div id="quick-file-pane">
+          <div class="field">
+            <label for="quick-file">File, up to 256 MB</label>
+            <input id="quick-file" type="file">
+          </div>
+        </div>
+
+        <div id="quick-text-pane" hidden>
+          <div class="field">
+            <label for="quick-text-title">Text title</label>
+            <input id="quick-text-title" type="text" value="JamScan message" maxlength="120">
+          </div>
+          <div class="field">
+            <label for="quick-text">Text</label>
+            <textarea id="quick-text" placeholder="Type or paste text here"></textarea>
+          </div>
+          <button id="quick-prepare-text" class="button" type="button">Prepare text</button>
+        </div>
+
+        <div class="field">
+          <label for="pair-origin">Receiver address</label>
+          <select id="pair-origin"></select>
+          <small class="field-help">Choose an address the receiving phone can open. A public HTTPS address is best.</small>
+        </div>
+
+        <label class="check-row">
+          <input id="auto-send" type="checkbox" checked>
+          <span>Send automatically after the receiver connects</span>
+        </label>
+
+        <div class="button-row">
+          <button id="create-pairing" class="button primary" type="button" disabled>Create pairing QR</button>
+          <button id="send-now" class="button dark" type="button" disabled>Send now</button>
+          <button id="reset-quick-send" class="button danger" type="button">Reset</button>
+        </div>
+        <div id="quick-send-status" class="status">Choose a file or prepare text.</div>
+        <div class="warning">Only the pairing offer passes through the signaling server. File bytes are sent through WebRTC and are not uploaded to JamScan.</div>
+      </section>
+
+      <section class="card quick-pair-card">
+        <h2>Scan once to connect</h2>
+        <p class="muted">Use the receiving phone's normal camera app. The QR stays still and contains no file data.</p>
+        <div id="pairing-placeholder" class="pairing-placeholder">Prepare content, then create a pairing QR.</div>
+        <canvas id="pairing-qr" width="560" height="560" hidden></canvas>
+        <div id="pairing-details" hidden>
+          <div class="pair-code"><span>Pairing code</span><strong id="pair-code">-</strong></div>
+          <div class="button-row center-row">
+            <button id="copy-pair-link" class="button" type="button">Copy pairing link</button>
+          </div>
+        </div>
+        <div class="metrics quick-metrics">
+          <div class="metric"><span>Connection</span><strong id="quick-connection">Not paired</strong></div>
+          <div class="metric"><span>File</span><strong id="quick-file-size">-</strong></div>
+          <div class="metric"><span>Sent</span><strong id="quick-sent">0 B</strong></div>
+          <div class="metric"><span>Speed</span><strong id="quick-speed">-</strong></div>
+          <div class="metric"><span>Remaining</span><strong id="quick-eta">-</strong></div>
+          <div class="metric"><span>Route</span><strong id="quick-route">-</strong></div>
+        </div>
+        <div class="progress-track"><div id="quick-send-progress" class="progress-bar"></div></div>
+      </section>
+    </div>
+  </main>
+  <footer>Quick Transfer requires the JamScan Node server for pairing. Optical Transfer remains available as an offline fallback.</footer>
+  <script type="module" src="../../src/quick-send.js"></script>
+</body>
+</html>
