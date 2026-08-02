@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f4f1ea">
-  <meta name="description" content="JamScan turns files and text into animated dot streams or portable .jscan files.">
+  <meta name="theme-color" content="#071014">
+  <meta name="description" content="JamScan turns files and text into camera-readable dot streams or portable .jscan files.">
   <title>JamScan</title>
   <link rel="stylesheet" href="assets/css/styles.css">
   <script src="assets/js/device.js" defer></script>
@@ -12,97 +12,105 @@
   <script src="assets/js/home.js" defer></script>
 </head>
 <body data-page="home">
-  <!-- Main navigation -->
+  <a class="skip-link" href="#mainContent">Skip to main content</a>
+
   <header class="site-header">
     <a class="brand" href="./" aria-label="JamScan home">
       <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-      <span><strong>JamScan</strong><small>Animated dot sharing</small></span>
+      <span><strong>JamScan</strong><small>Camera-readable file sharing</small></span>
     </a>
     <button class="menu-button" id="menuButton" type="button" aria-expanded="false" aria-controls="siteNav">Menu</button>
     <nav class="site-nav" id="siteNav" aria-label="Main navigation">
-      <a class="active" href="./">Home</a>
+      <a aria-current="page" href="./">Home</a>
       <a href="make/">Make</a>
       <a href="scan/">Scan</a>
       <a href="open/">Open</a>
+      <a href="accessibility/">Accessibility</a>
     </nav>
     <div class="device-label" data-device-label>Checking device</div>
   </header>
 
-  <main>
-    <!-- Start section -->
+  <main id="mainContent">
     <section class="hero section-wrap">
       <div class="hero-copy">
         <p class="kicker">Open source local sharing</p>
-        <h1>Files become moving dots.</h1>
-        <p class="hero-text">Create a rapid JamScan dot stream, scan it from another device, or share the same content as a portable .jscan file.</p>
+        <h1>Move files through light.</h1>
+        <p class="hero-text">JamScan turns text and files into a bordered dot stream that another device can scan. For larger files, send the portable .jscan file directly.</p>
         <div class="hero-actions">
-          <a class="button primary large" href="make/">Start making</a>
-          <a class="button large" href="scan/">Start scanning</a>
+          <a class="button primary large" href="make/">Make a JamScan</a>
+          <a class="button large" href="scan/">Scan a stream</a>
         </div>
         <div class="hero-tags" aria-label="Project features">
           <span>No account</span>
           <span>No upload server</span>
-          <span>SHA-256 checks</span>
-          <span>Warning before preview</span>
+          <span>Missing-frame recovery</span>
+          <span>Safety warning before preview</span>
         </div>
       </div>
+
       <div class="demo-panel">
-        <div class="demo-head"><span>Live sample</span><span id="demoFrame">Frame 0001</span></div>
-        <canvas id="demoCanvas" width="560" height="560" aria-label="Animated JamScan sample"></canvas>
+        <div class="demo-head"><span>Protocol preview</span><span>Static sample</span></div>
+        <canvas id="demoCanvas" width="580" height="580" aria-label="Static example of a JamScan dot frame"></canvas>
+        <p class="demo-caption">The home-page sample stays still. Actual streams only move after the user starts them.</p>
       </div>
     </section>
 
-    <!-- Start choices -->
-    <section class="section-wrap start-section">
+    <section class="section-wrap start-section" aria-labelledby="startTitle">
       <div class="section-heading">
-        <p class="kicker">Choose a page</p>
-        <h2>What do you want to do?</h2>
+        <p class="kicker">Start here</p>
+        <h2 id="startTitle">Choose what you want to do</h2>
       </div>
+
       <div class="action-grid">
         <a class="action-card" href="make/">
           <span class="action-number">01</span>
-          <h3>Make a JamScan</h3>
-          <p>Package text, photos, GIFs, audio, video, or another file. Save it or show it as animated dots.</p>
-          <span class="text-link">Open make page</span>
+          <h3>Make</h3>
+          <p>Package text, photos, GIFs, audio, video, or another file. Save it or show it as a dot stream.</p>
+          <span class="text-link">Open Make</span>
         </a>
         <a class="action-card" href="scan/">
           <span class="action-number">02</span>
-          <h3>Scan moving dots</h3>
-          <p>Use a camera to collect visual frames from another screen and rebuild the original package.</p>
-          <span class="text-link">Open scan page</span>
+          <h3>Scan</h3>
+          <p>Use a phone or computer camera. The scanner searches for the border, waits for a start marker, and recovers missed frames.</p>
+          <span class="text-link">Open Scan</span>
         </a>
         <a class="action-card" href="open/">
           <span class="action-number">03</span>
-          <h3>Open a .jscan file</h3>
-          <p>Verify a saved package, read its type, and review the safety warning before showing anything.</p>
-          <span class="text-link">Open file page</span>
+          <h3>Open</h3>
+          <p>Open a saved .jscan file, verify its hash, review the content warning, and then preview or download it.</p>
+          <span class="text-link">Open a file</span>
         </a>
       </div>
     </section>
 
-    <!-- Safety section -->
-    <section class="section-wrap info-grid">
-      <article class="info-card">
-        <h3>Warning first</h3>
-        <p>Recovered content is labeled before preview. The warning covers unsafe files, scams, misleading links, and inappropriate content.</p>
-      </article>
-      <article class="info-card">
-        <h3>Local processing</h3>
-        <p>JamScan does not need an account or upload service. Packaging, scanning, and verification happen in the browser.</p>
-      </article>
-      <article class="info-card">
-        <h3>Device layouts</h3>
-        <p>Phones and tablets use mobile mode. Desktop and supported VR browsers use desktop mode. Unsupported devices show an error code.</p>
-      </article>
+    <section class="section-wrap info-section" aria-labelledby="reliableTitle">
+      <div class="section-heading">
+        <p class="kicker">Built for reliability</p>
+        <h2 id="reliableTitle">Clear feedback at every step</h2>
+      </div>
+
+      <div class="info-grid">
+        <article class="info-card">
+          <h3>Automatic camera lock</h3>
+          <p>The scanner tries several centered crops and remembers the best one after it finds the bordered square.</p>
+        </article>
+        <article class="info-card">
+          <h3>Start and end markers</h3>
+          <p>Starting in the middle is handled safely. JamScan waits for the next start marker before accepting data.</p>
+        </article>
+        <article class="info-card">
+          <h3>Accessible alternative</h3>
+          <p>The visual stream is not the only route. The same content can be shared as a keyboard-accessible .jscan file.</p>
+        </article>
+      </div>
     </section>
   </main>
 
-  <!-- Page footer -->
   <footer class="site-footer section-wrap">
     <span>JamScan open source project</span>
-    <span><a href="README.md">README</a> and <a href="LICENSE">MIT License</a></span>
+    <span><a href="README.md">README</a> - <a href="ACCESSIBILITY.md">Accessibility</a> - <a href="LEGAL.md">Legal notes</a> - <a href="LICENSE">MIT License</a></span>
   </footer>
 
-  <div class="toast" id="toast" role="status"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f4f1ea">
-  <meta name="description" content="Open and verify portable JamScan files.">
+  <meta name="theme-color" content="#071014">
+  <meta name="description" content="Open and verify a portable JamScan file.">
   <title>Open - JamScan</title>
   <link rel="stylesheet" href="../assets/css/styles.css">
   <script src="../assets/js/device.js" defer></script>
@@ -14,49 +14,47 @@
   <script src="../assets/js/open.js" defer></script>
 </head>
 <body data-page="open">
-  <!-- Main navigation -->
+  <a class="skip-link" href="#mainContent">Skip to main content</a>
+
   <header class="site-header">
     <a class="brand" href="../" aria-label="JamScan home">
       <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-      <span><strong>JamScan</strong><small>Animated dot sharing</small></span>
+      <span><strong>JamScan</strong><small>Camera-readable file sharing</small></span>
     </a>
     <button class="menu-button" id="menuButton" type="button" aria-expanded="false" aria-controls="siteNav">Menu</button>
     <nav class="site-nav" id="siteNav" aria-label="Main navigation">
       <a href="../">Home</a>
       <a href="../make/">Make</a>
       <a href="../scan/">Scan</a>
-      <a class="active" href="./">Open</a>
+      <a aria-current="page" href="./">Open</a>
+      <a href="../accessibility/">Accessibility</a>
     </nav>
     <div class="device-label" data-device-label>Checking device</div>
   </header>
 
-  <main class="section-wrap page-main narrow-main">
-    <!-- Page heading -->
+  <main class="section-wrap page-main narrow-main" id="mainContent">
     <section class="page-heading">
       <p class="kicker">Open</p>
       <h1>Open a .jscan file</h1>
-      <p>JamScan verifies the package, identifies the content type, and displays a warning before anything is shown.</p>
+      <p>This method does not use a changing visual stream. JamScan verifies the package, identifies the claimed content type, and displays a warning before anything is shown.</p>
     </section>
 
-    <!-- File opener -->
     <section class="panel-card">
       <input id="jscanInput" type="file" accept=".jscan,application/x-jamscan" hidden>
-      <div class="drop-zone large-drop" id="jscanDrop" tabindex="0" role="button">
+      <div class="drop-zone large-drop" id="jscanDrop" tabindex="0" role="button" aria-label="Select a .jscan file or drop it here">
         <strong>Drop a .jscan file here</strong>
         <span>or select a file</span>
       </div>
-      <div class="status-box" id="openStatus">No .jscan file selected.</div>
+      <div class="status-box" id="openStatus" role="status" aria-live="polite">No .jscan file selected.</div>
     </section>
 
-    <!-- Opened preview -->
-    <section id="openPreviewHost"></section>
+    <section id="openPreviewHost" aria-live="polite"></section>
   </main>
 
-  <!-- Safety warning -->
-  <dialog class="warning-dialog" id="warningDialog">
+  <dialog class="warning-dialog" id="warningDialog" aria-labelledby="warningTitle" aria-describedby="warningSubtitle">
     <div class="dialog-heading">
-      <div class="warning-symbol">!</div>
-      <div><h2>Check before opening</h2><p id="warningSubtitle">JamScan content may be unsafe or inappropriate.</p></div>
+      <div class="warning-symbol" aria-hidden="true">!</div>
+      <div><h2 id="warningTitle">Check before opening</h2><p id="warningSubtitle">JamScan content may be unsafe or inappropriate.</p></div>
     </div>
     <div class="dialog-body">
       <div class="content-summary">
@@ -78,12 +76,11 @@
     </div>
   </dialog>
 
-  <!-- Page footer -->
   <footer class="site-footer section-wrap">
     <span>JamScan open source project</span>
-    <span><a href="../README.md">README</a> and <a href="../LICENSE">MIT License</a></span>
+    <span><a href="../README.md">README</a> - <a href="../ACCESSIBILITY.md">Accessibility</a> - <a href="../LEGAL.md">Legal notes</a> - <a href="../LICENSE">MIT License</a></span>
   </footer>
 
-  <div class="toast" id="toast" role="status"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

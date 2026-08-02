@@ -2,12 +2,14 @@
   "use strict";
 
   // Format settings
-  const GRID = 64;
+  const GRID = 48;
   const FINDER = 8;
+  const DISPLAY_GRID = 60;
+  const DATA_OFFSET = 6;
   const FRAME_HEADER_BYTES = 28;
-  const MAX_PAYLOAD = 448;
+  const MAX_PAYLOAD = 224;
   const MAX_SOURCE_SIZE = 256 * 1024 * 1024;
-  const FRAME_VERSION = 2;
+  const FRAME_VERSION = 3;
   const MAGIC = new Uint8Array([0x4a, 0x53, 0x43, 0x41, 0x4e, 0x01]);
   const textEncoder = new TextEncoder();
   const textDecoder = new TextDecoder();
@@ -36,7 +38,8 @@
 
     if (localX === 0 || localY === 0 || localX === 7 || localY === 7) return 1;
     if (localX === 1 || localY === 1 || localX === 6 || localY === 6) return 0;
-    return 1;
+    if (localX === 2 || localY === 2 || localX === 5 || localY === 5) return 1;
+    return 0;
   }
 
   // File size text
@@ -356,8 +359,9 @@
     writeU32(markerPayload, 0, stream.packageLength);
     writeU32(markerPayload, 4, stream.packageCRC);
 
-    const startRepeats = 3 + (cycle % 3);
-    const endRepeats = 2 + (cycle % 2);
+    const startRepeats = 3;
+    const dataRepeats = 2;
+    const endRepeats = 2;
     let sequence = 0;
 
     for (let repeat = 0; repeat < startRepeats; repeat += 1) {
@@ -365,12 +369,14 @@
       sequence += 1;
     }
 
-    const offset = stream.total ? (cycle * 17) % stream.total : 0;
+    const offset = stream.total ? (cycle * 11) % stream.total : 0;
 
     for (let position = 0; position < stream.total; position += 1) {
       const index = (offset + position) % stream.total;
-      frames.push(createFrame(stream, FRAME_TYPE.DATA, index, cycle, sequence, stream.chunks[index]));
-      sequence += 1;
+      for (let repeat = 0; repeat < dataRepeats; repeat += 1) {
+        frames.push(createFrame(stream, FRAME_TYPE.DATA, index, cycle, sequence, stream.chunks[index]));
+        sequence += 1;
+      }
     }
 
     for (let repeat = 0; repeat < endRepeats; repeat += 1) {
@@ -424,15 +430,24 @@
   function renderFrame(canvas, frame) {
     const context = canvas.getContext("2d", { alpha: false });
     const size = canvas.width;
-    const cell = size / GRID;
+    const cell = size / DISPLAY_GRID;
     const packet = concatArrays([frame.header, frame.payload]);
     const bits = bytesToBits(packet);
     const random = xorshift((frame.streamId ^ frame.index ^ frame.cycle ^ 0x9e3779b9) >>> 0);
     let bitIndex = 0;
 
+    context.imageSmoothingEnabled = false;
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, size, size);
 
+    // Locator border
+    context.fillStyle = "#111111";
+    context.fillRect(2 * cell, 2 * cell, (DISPLAY_GRID - 4) * cell, 2 * cell);
+    context.fillRect(2 * cell, (DISPLAY_GRID - 4) * cell, (DISPLAY_GRID - 4) * cell, 2 * cell);
+    context.fillRect(2 * cell, 2 * cell, 2 * cell, (DISPLAY_GRID - 4) * cell);
+    context.fillRect((DISPLAY_GRID - 4) * cell, 2 * cell, 2 * cell, (DISPLAY_GRID - 4) * cell);
+
+    // Data grid
     for (let y = 0; y < GRID; y += 1) {
       for (let x = 0; x < GRID; x += 1) {
         const bit = isReserved(x, y)
@@ -445,33 +460,13 @@
 
         context.fillStyle = bit ? "#111111" : "#ffffff";
         context.fillRect(
-          Math.floor(x * cell),
-          Math.floor(y * cell),
+          Math.floor((x + DATA_OFFSET) * cell),
+          Math.floor((y + DATA_OFFSET) * cell),
           Math.ceil(cell),
           Math.ceil(cell)
         );
       }
     }
-
-    context.strokeStyle = "#111111";
-    context.lineWidth = Math.max(2, size / 320);
-    context.strokeRect(1, 1, size - 2, size - 2);
-  }
-
-  // Marker check
-  function verifyFinder(samples) {
-    let matches = 0;
-    let total = 0;
-
-    for (let y = 0; y < GRID; y += 1) {
-      for (let x = 0; x < GRID; x += 1) {
-        if (!isReserved(x, y)) continue;
-        total += 1;
-        if (samples[y * GRID + x] === finderBit(x, y)) matches += 1;
-      }
-    }
-
-    return matches / total;
   }
 
   // Pixel light level
@@ -480,56 +475,46 @@
     return 0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2];
   }
 
-  // Read frame image
-  function sampleFrameFromCanvas(canvas) {
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    const width = canvas.width;
-    const height = canvas.height;
-    const image = context.getImageData(0, 0, width, height);
-    const data = image.data;
-    const cellWidth = width / GRID;
-    const cellHeight = height / GRID;
-    const offsetX = Math.max(1, Math.floor(cellWidth * 0.14));
-    const offsetY = Math.max(1, Math.floor(cellHeight * 0.14));
-    const luminance = new Float32Array(GRID * GRID);
-    let sampleIndex = 0;
+  // Matrix transform
+  function transformPoint(x, y, rotation, mirror) {
+    let tx = mirror ? GRID - 1 - x : x;
+    let ty = y;
+
+    if (rotation === 1) return [GRID - 1 - ty, tx];
+    if (rotation === 2) return [GRID - 1 - tx, GRID - 1 - ty];
+    if (rotation === 3) return [ty, GRID - 1 - tx];
+    return [tx, ty];
+  }
+
+  // Marker check
+  function verifyFinder(matrix, rotation, mirror) {
+    let matches = 0;
+    let total = 0;
 
     for (let y = 0; y < GRID; y += 1) {
       for (let x = 0; x < GRID; x += 1) {
-        const centerX = Math.min(width - 1, Math.max(0, Math.floor((x + 0.5) * cellWidth)));
-        const centerY = Math.min(height - 1, Math.max(0, Math.floor((y + 0.5) * cellHeight)));
-        const left = Math.max(0, centerX - offsetX);
-        const right = Math.min(width - 1, centerX + offsetX);
-        const top = Math.max(0, centerY - offsetY);
-        const bottom = Math.min(height - 1, centerY + offsetY);
-
-        luminance[sampleIndex] = (
-          getLight(data, width, centerX, centerY) +
-          getLight(data, width, left, centerY) +
-          getLight(data, width, right, centerY) +
-          getLight(data, width, centerX, top) +
-          getLight(data, width, centerX, bottom)
-        ) / 5;
-
-        sampleIndex += 1;
+        if (!isReserved(x, y)) continue;
+        const [sourceX, sourceY] = transformPoint(x, y, rotation, mirror);
+        total += 1;
+        if (matrix[sourceY * GRID + sourceX] === finderBit(x, y)) matches += 1;
       }
     }
 
-    const sorted = Array.from(luminance).sort((a, b) => a - b);
-    const dark = sorted[Math.floor(sorted.length * 0.12)];
-    const light = sorted[Math.floor(sorted.length * 0.88)];
+    return matches / total;
+  }
 
-    if (light - dark < 42) throw new Error("Low contrast");
-
-    const threshold = (dark + light) / 2;
-    const bits = Array.from(luminance, value => (value < threshold ? 1 : 0));
-
-    if (verifyFinder(bits) < 0.8) throw new Error("Finder not aligned");
+  // Decode transformed grid
+  function decodeGrid(matrix, rotation, mirror) {
+    if (verifyFinder(matrix, rotation, mirror) < 0.86) {
+      throw new Error("Finder not aligned");
+    }
 
     const dataBits = [];
     for (let y = 0; y < GRID; y += 1) {
       for (let x = 0; x < GRID; x += 1) {
-        if (!isReserved(x, y)) dataBits.push(bits[y * GRID + x]);
+        if (isReserved(x, y)) continue;
+        const [sourceX, sourceY] = transformPoint(x, y, rotation, mirror);
+        dataBits.push(matrix[sourceY * GRID + sourceX]);
       }
     }
 
@@ -585,11 +570,229 @@
       sequence,
       payload,
       packageLength,
-      packageCRC
+      packageCRC,
+      rotation,
+      mirrored: mirror
     };
   }
 
+  // Percentile value
+  function percentile(values, fraction) {
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * fraction)))];
+  }
+
+  // Find locator border
+  function locateDisplay(data, width, height) {
+    const sampleStep = Math.max(2, Math.floor(Math.min(width, height) / 180));
+    const lightSamples = [];
+
+    for (let y = Math.floor(sampleStep / 2); y < height; y += sampleStep) {
+      for (let x = Math.floor(sampleStep / 2); x < width; x += sampleStep) {
+        lightSamples.push(getLight(data, width, x, y));
+      }
+    }
+
+    const darkLevel = percentile(lightSamples, 0.12);
+    const lightLevel = percentile(lightSamples, 0.88);
+    if (lightLevel - darkLevel < 32) throw new Error("Low contrast");
+    const threshold = (darkLevel + lightLevel) / 2;
+
+    function lineScores(length, otherLength, vertical) {
+      const scores = new Float32Array(length);
+
+      for (let line = 0; line < length; line += 1) {
+        let darkCount = 0;
+        let count = 0;
+
+        for (let other = 0; other < otherLength; other += sampleStep) {
+          const x = vertical ? line : other;
+          const y = vertical ? other : line;
+          if (getLight(data, width, x, y) < threshold) darkCount += 1;
+          count += 1;
+        }
+
+        scores[line] = count ? darkCount / count : 0;
+      }
+
+      return scores;
+    }
+
+    function findBands(scores) {
+      const bands = [];
+      const minimumLength = Math.max(2, Math.floor(scores.length / 260));
+      const maximumLength = Math.max(minimumLength + 1, Math.floor(scores.length * 0.13));
+      let start = -1;
+
+      for (let index = 0; index <= scores.length; index += 1) {
+        const active = index < scores.length && scores[index] >= 0.55;
+
+        if (active && start < 0) start = index;
+        if ((!active || index === scores.length) && start >= 0) {
+          const end = index - 1;
+          const length = end - start + 1;
+
+          if (length >= minimumLength && length <= maximumLength) {
+            let total = 0;
+            for (let value = start; value <= end; value += 1) total += scores[value];
+            bands.push({
+              start,
+              end,
+              center: (start + end) / 2,
+              score: total / length
+            });
+          }
+
+          start = -1;
+        }
+      }
+
+      return bands;
+    }
+
+    function chooseBand(bands, length, nearStart) {
+      const candidates = bands.filter(band => {
+        const ratio = band.center / length;
+        return nearStart ? ratio > 0.015 && ratio < 0.46 : ratio > 0.54 && ratio < 0.985;
+      });
+
+      if (!candidates.length) return null;
+
+      candidates.sort((a, b) => {
+        const scoreDifference = b.score - a.score;
+        if (Math.abs(scoreDifference) > 0.035) return scoreDifference;
+        return nearStart ? a.center - b.center : b.center - a.center;
+      });
+
+      return candidates[0];
+    }
+
+    const columnBands = findBands(lineScores(width, height, true));
+    const rowBands = findBands(lineScores(height, width, false));
+    const left = chooseBand(columnBands, width, true);
+    const right = chooseBand(columnBands, width, false);
+    const top = chooseBand(rowBands, height, true);
+    const bottom = chooseBand(rowBands, height, false);
+
+    if (!left || !right || !top || !bottom) throw new Error("Locator not found");
+
+    const moduleWidth = (right.end + 1 - left.start) / (DISPLAY_GRID - 4);
+    const moduleHeight = (bottom.end + 1 - top.start) / (DISPLAY_GRID - 4);
+    const startX = left.start - 2 * moduleWidth;
+    const startY = top.start - 2 * moduleHeight;
+    const ratio = moduleWidth / moduleHeight;
+
+    if (
+      moduleWidth < 2 ||
+      moduleHeight < 2 ||
+      ratio < 0.72 ||
+      ratio > 1.38 ||
+      startX < -width * 0.12 ||
+      startY < -height * 0.12 ||
+      startX + DISPLAY_GRID * moduleWidth > width * 1.12 ||
+      startY + DISPLAY_GRID * moduleHeight > height * 1.12
+    ) {
+      throw new Error("Locator not found");
+    }
+
+    return { startX, startY, moduleWidth, moduleHeight };
+  }
+
+  // Read frame image
+  function sampleFrameFromCanvas(canvas) {
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    const width = canvas.width;
+    const height = canvas.height;
+    const image = context.getImageData(0, 0, width, height);
+    const data = image.data;
+    let geometry;
+
+    try {
+      geometry = locateDisplay(data, width, height);
+    } catch (error) {
+      if (error.message === "Low contrast") throw error;
+      geometry = {
+        startX: 0,
+        startY: 0,
+        moduleWidth: width / DISPLAY_GRID,
+        moduleHeight: height / DISPLAY_GRID
+      };
+    }
+
+    const luminance = new Float32Array(GRID * GRID);
+    const locatorDark = [];
+    const locatorLight = [];
+    let sampleIndex = 0;
+
+    function sampleModule(moduleX, moduleY) {
+      const centerX = Math.min(width - 1, Math.max(0, Math.floor(geometry.startX + (moduleX + 0.5) * geometry.moduleWidth)));
+      const centerY = Math.min(height - 1, Math.max(0, Math.floor(geometry.startY + (moduleY + 0.5) * geometry.moduleHeight)));
+      const dx = Math.max(1, Math.floor(geometry.moduleWidth * 0.15));
+      const dy = Math.max(1, Math.floor(geometry.moduleHeight * 0.15));
+
+      return (
+        getLight(data, width, centerX, centerY) +
+        getLight(data, width, Math.max(0, centerX - dx), centerY) +
+        getLight(data, width, Math.min(width - 1, centerX + dx), centerY) +
+        getLight(data, width, centerX, Math.max(0, centerY - dy)) +
+        getLight(data, width, centerX, Math.min(height - 1, centerY + dy))
+      ) / 5;
+    }
+
+    // Locator samples
+    for (let module = 6; module < DISPLAY_GRID - 6; module += 6) {
+      for (const border of [2, 3, DISPLAY_GRID - 4, DISPLAY_GRID - 3]) {
+        locatorDark.push(sampleModule(module, border));
+        locatorDark.push(sampleModule(border, module));
+      }
+
+      for (const separator of [4, 5, DISPLAY_GRID - 6, DISPLAY_GRID - 5]) {
+        locatorLight.push(sampleModule(module, separator));
+        locatorLight.push(sampleModule(separator, module));
+      }
+    }
+
+    const darkAverage = locatorDark.reduce((sum, value) => sum + value, 0) / locatorDark.length;
+    const lightAverage = locatorLight.reduce((sum, value) => sum + value, 0) / locatorLight.length;
+
+    if (lightAverage - darkAverage < 30) {
+      throw new Error("Locator not found");
+    }
+
+    // Data samples
+    for (let y = 0; y < GRID; y += 1) {
+      for (let x = 0; x < GRID; x += 1) {
+        luminance[sampleIndex] = sampleModule(x + DATA_OFFSET, y + DATA_OFFSET);
+        sampleIndex += 1;
+      }
+    }
+
+    const dark = percentile(luminance, 0.12);
+    const light = percentile(luminance, 0.88);
+
+    if (light - dark < 34) throw new Error("Low contrast");
+
+    const threshold = (dark + light) / 2;
+    const matrix = Array.from(luminance, value => (value < threshold ? 1 : 0));
+    let lastError = new Error("Not a JamScan frame");
+
+    for (const mirror of [false, true]) {
+      for (let rotation = 0; rotation < 4; rotation += 1) {
+        try {
+          return decodeGrid(matrix, rotation, mirror);
+        } catch (error) {
+          if (error.message === "CRC mismatch") lastError = error;
+          else if (lastError.message !== "CRC mismatch") lastError = error;
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
   window.JamScanCore = {
+    GRID,
+    DISPLAY_GRID,
     MAX_SOURCE_SIZE,
     FRAME_TYPE,
     textEncoder,

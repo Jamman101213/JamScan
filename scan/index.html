@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f4f1ea">
-  <meta name="description" content="Scan animated JamScan dot streams with a camera.">
+  <meta name="theme-color" content="#071014">
+  <meta name="description" content="Scan a JamScan stream with automatic camera framing and missing-frame recovery.">
   <title>Scan - JamScan</title>
   <link rel="stylesheet" href="../assets/css/styles.css">
   <script src="../assets/js/device.js" defer></script>
@@ -14,45 +14,48 @@
   <script src="../assets/js/scan.js" defer></script>
 </head>
 <body data-page="scan">
-  <!-- Main navigation -->
+  <a class="skip-link" href="#mainContent">Skip to main content</a>
+
   <header class="site-header">
     <a class="brand" href="../" aria-label="JamScan home">
       <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-      <span><strong>JamScan</strong><small>Animated dot sharing</small></span>
+      <span><strong>JamScan</strong><small>Camera-readable file sharing</small></span>
     </a>
     <button class="menu-button" id="menuButton" type="button" aria-expanded="false" aria-controls="siteNav">Menu</button>
     <nav class="site-nav" id="siteNav" aria-label="Main navigation">
       <a href="../">Home</a>
       <a href="../make/">Make</a>
-      <a class="active" href="./">Scan</a>
+      <a aria-current="page" href="./">Scan</a>
       <a href="../open/">Open</a>
+      <a href="../accessibility/">Accessibility</a>
     </nav>
     <div class="device-label" data-device-label>Checking device</div>
   </header>
 
-  <main class="section-wrap page-main">
-    <!-- Page heading -->
+  <main class="section-wrap page-main" id="mainContent">
     <section class="page-heading">
       <p class="kicker">Scan</p>
-      <h1>Scan moving dots</h1>
-      <p>Point the camera at a JamScan stream. You can begin in the middle; the scanner waits for the next start marker before collecting data.</p>
+      <h1>Point, lock, recover.</h1>
+      <p>Place the entire bordered square inside the guide. JamScan searches for the best crop, handles rotated or mirrored camera images, and keeps collecting anything it missed on later loops.</p>
     </section>
 
-    <section class="workspace-grid scan-grid">
-      <!-- Camera scanner -->
+    <div class="safety-box"><strong>Before scanning:</strong> the other screen will show a changing black-and-white pattern. People sensitive to flashing or changing patterns should use the <a href="../open/">Open .jscan</a> method instead.</div>
+
+    <section class="scanner-grid">
       <article class="panel-card">
         <div class="panel-heading">
           <h2>Camera</h2>
-          <p>Center the other screen inside the square guide.</p>
+          <p>Keep the camera parallel to the other screen and leave the white margin visible.</p>
         </div>
 
         <div class="camera-shell">
-          <video id="cameraVideo" playsinline muted></video>
-          <div class="camera-placeholder" id="cameraPlaceholder">Camera is off</div>
+          <video id="cameraVideo" playsinline muted aria-label="Camera preview"></video>
+          <div class="camera-placeholder" id="cameraPlaceholder"><span>Camera is off. Select Start camera.</span></div>
           <div class="scan-guide" aria-hidden="true"></div>
-          <div class="scan-badge" id="scanBadge">Ready to scan</div>
+          <div class="scan-badge" id="scanBadge" aria-hidden="true">Ready to scan</div>
         </div>
-        <canvas class="hidden" id="sampleCanvas" width="512" height="512"></canvas>
+
+        <canvas class="hidden" id="sampleCanvas" width="480" height="480" aria-hidden="true"></canvas>
 
         <div class="button-row">
           <button class="button primary" id="cameraButton" type="button">Start camera</button>
@@ -60,18 +63,19 @@
           <button class="button danger" id="resetScanButton" type="button">Reset scan</button>
         </div>
 
-        <div class="notice-box">Camera access normally requires HTTPS or localhost. If camera permission is blocked, use the Open page with a .jscan file.</div>
+        <div class="notice-box">Camera access normally requires HTTPS or localhost. Increase the source screen brightness, avoid glare, and hold both devices still. The scanner automatically searches several crop sizes.</div>
       </article>
 
-      <!-- Scan progress -->
       <article class="panel-card">
         <div class="panel-heading">
           <h2>Incoming stream</h2>
-          <p id="scanMessage">No frames received yet.</p>
+          <p id="scanMessage" role="status" aria-live="polite">Point the camera at the full square. JamScan will lock automatically.</p>
         </div>
 
-        <div class="progress-track"><div class="progress-bar" id="scanProgress"></div></div>
-        <div class="progress-text"><span id="scanPercent">0%</span><span id="scanFrameCount">0 / 0 frames</span></div>
+        <div class="progress-track" role="progressbar" aria-label="Scan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress-bar" id="scanProgress"></div>
+        </div>
+        <div class="progress-text"><span id="scanPercent">0%</span><span id="scanFrameCount">0 / 0 data frames</span></div>
 
         <div class="scan-state-row"><span>Scanner state</span><strong id="scanState">Waiting for start</strong></div>
 
@@ -80,36 +84,36 @@
           <div class="metric"><span>Rejected</span><strong id="badFrames">0</strong></div>
           <div class="metric"><span>Missed flashes</span><strong id="missedFlashes">0</strong></div>
           <div class="metric"><span>Still missing</span><strong id="missingFrames">0</strong></div>
-          <div class="metric"><span>Last decode</span><strong id="decodeTime">-</strong></div>
-          <div class="metric"><span>Cycles seen</span><strong id="cycleCount">0</strong></div>
+          <div class="metric"><span>Repeated data</span><strong id="duplicateFrames">0</strong></div>
+          <div class="metric"><span>Camera lock</span><strong id="lockStatus">Searching</strong></div>
+          <div class="metric"><span>Last search</span><strong id="decodeTime">-</strong></div>
+          <div class="metric"><span>Loops seen</span><strong id="cycleCount">0</strong></div>
         </div>
 
         <div class="sub-panel">
           <h3>Test a frame image</h3>
-          <p>Select a screenshot of one JamScan frame. A complete package normally requires many different frames.</p>
+          <p>Select a screenshot containing one complete JamScan frame. The decoder tries several centered crop sizes.</p>
           <input id="frameImageInput" type="file" accept="image/*" hidden>
           <button class="button" id="frameImageButton" type="button">Choose frame image</button>
         </div>
 
         <ul class="plain-list">
-          <li>Data seen before a start marker is ignored.</li>
+          <li>Data from the middle of a loop is ignored until a start marker appears.</li>
           <li>Sequence gaps are counted as missed flashes.</li>
-          <li>Missing data is collected during later loops.</li>
-          <li>Damaged frames fail the CRC check.</li>
-          <li>Recovered content stays hidden until the warning is accepted.</li>
+          <li>Missing data stays listed and is filled during later loops.</li>
+          <li>Every frame has a CRC check and the final package is verified again.</li>
+          <li>The recovered item stays hidden until the content warning is accepted.</li>
         </ul>
       </article>
     </section>
 
-    <!-- Recovered preview -->
-    <section id="scanPreviewHost"></section>
+    <section id="scanPreviewHost" aria-live="polite"></section>
   </main>
 
-  <!-- Safety warning -->
-  <dialog class="warning-dialog" id="warningDialog">
+  <dialog class="warning-dialog" id="warningDialog" aria-labelledby="warningTitle" aria-describedby="warningSubtitle">
     <div class="dialog-heading">
-      <div class="warning-symbol">!</div>
-      <div><h2>Check before opening</h2><p id="warningSubtitle">JamScan content may be unsafe or inappropriate.</p></div>
+      <div class="warning-symbol" aria-hidden="true">!</div>
+      <div><h2 id="warningTitle">Check before opening</h2><p id="warningSubtitle">JamScan content may be unsafe or inappropriate.</p></div>
     </div>
     <div class="dialog-body">
       <div class="content-summary">
@@ -131,12 +135,11 @@
     </div>
   </dialog>
 
-  <!-- Page footer -->
   <footer class="site-footer section-wrap">
     <span>JamScan open source project</span>
-    <span><a href="../README.md">README</a> and <a href="../LICENSE">MIT License</a></span>
+    <span><a href="../README.md">README</a> - <a href="../ACCESSIBILITY.md">Accessibility</a> - <a href="../LEGAL.md">Legal notes</a> - <a href="../LICENSE">MIT License</a></span>
   </footer>
 
-  <div class="toast" id="toast" role="status"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

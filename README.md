@@ -1,15 +1,16 @@
 # JamScan
 
-JamScan is an open source browser project for sharing text and files as animated black-and-white dot streams or portable `.jscan` files.
+JamScan is an open source browser project for sharing text and files as camera-readable black-and-white dot streams or portable `.jscan` files.
 
-JamScan runs locally in the browser. It does not require an account, upload server, paid API, external framework, or build step.
+Everything runs locally in the browser. JamScan does not require an account, upload server, paid API, external framework, package installation, or build step.
 
 ## Pages
 
 - `/` - Start page and navigation
-- `/make/` - Create a `.jscan` file and animated dot stream
-- `/scan/` - Scan an animated stream with a camera
+- `/make/` - Create a `.jscan` file and visual stream
+- `/scan/` - Scan a visual stream with a camera
 - `/open/` - Open and verify a saved `.jscan` file
+- `/accessibility/` - Accessibility statement and testing guidance
 
 ## Project structure
 
@@ -21,6 +22,8 @@ JamScan_Open_Source/
   scan/
     index.html
   open/
+    index.html
+  accessibility/
     index.html
   assets/
     css/
@@ -36,16 +39,20 @@ JamScan_Open_Source/
       viewer.js
   docs/
     FORMAT.md
-  .gitignore
+  tests/
+    index.html
+    protocol.js
+    protocol-node.js
+  ACCESSIBILITY.md
+  LEGAL.md
   LICENSE
+  package.json
   README.md
 ```
 
 ## Run locally
 
-Camera access normally needs HTTPS or localhost. Opening the HTML files directly still supports making and opening `.jscan` files, but camera access may be blocked.
-
-From the project folder, run:
+Camera access normally requires HTTPS or localhost. From the project folder, run:
 
 ```bash
 python -m http.server 8000
@@ -57,11 +64,82 @@ Then open:
 http://localhost:8000/
 ```
 
-Another option is:
+You can also use:
 
 ```bash
 npx serve .
 ```
+
+Or use the included script:
+
+```bash
+npm run serve
+```
+
+Opening the HTML files directly still supports making and opening `.jscan` files, but camera access may be blocked by the browser.
+
+## Scanner improvements
+
+Visual protocol version 3 was designed for real phone cameras rather than perfect screenshots.
+
+- The code grid was reduced from 64 by 64 to 48 by 48 modules.
+- Every frame has a white margin and solid locator border.
+- The scanner searches several centered crop sizes instead of requiring one exact crop.
+- The decoder tries rotated and mirrored versions automatically.
+- The scanner remembers a successful crop and tries it first on later camera frames.
+- Every data frame is displayed twice.
+- Start and end markers are repeated.
+- A scan started in the middle waits for the next start marker.
+- Sequence gaps are counted as missed flashes.
+- Missing data is preserved and filled during later loops.
+- Duplicate data frames are ignored.
+- CRC-32 checks reject damaged visual frames.
+- SHA-256 verifies the recovered payload.
+
+For the best result, keep both devices parallel, keep the full border and white margin visible, increase the source display brightness, and avoid glare.
+
+## Stream rate and motion safety
+
+JamScan does not promise one-millisecond visible flashes. Browsers, displays, and cameras cannot reliably show and capture separate frames at that rate.
+
+The Make page includes these rates:
+
+- Reduced motion: 1 frame per second
+- Reliable: 2 frames per second
+- Quick: 3 frames per second
+
+The stream does not autoplay. A photosensitivity warning appears before it starts, playback stops when the tab becomes hidden, and users who request reduced motion receive the 1 fps default.
+
+The `.jscan` file route is the nonvisual and nonflashing alternative.
+
+## Accessibility
+
+JamScan aims for WCAG 2.2 Level AA where the project can reasonably apply it. Included work covers:
+
+- Semantic headings and landmarks
+- Skip links
+- Keyboard-accessible controls and drop areas
+- Visible keyboard focus
+- Form labels and dialog labels
+- Polite status announcements
+- Reduced-motion support
+- High-contrast and forced-colors support
+- No autoplaying visual stream
+- A nonvisual `.jscan` transfer route
+- An accessibility statement and manual test routine
+
+Read `ACCESSIBILITY.md` for the known limitation and test checklist.
+
+Accessibility work does not guarantee legal compliance. Automated testing is not enough. Production use should include manual keyboard testing, screen-reader testing, zoom and contrast checks, testing with disabled users, and legal advice when needed.
+
+Official references used for the project review:
+
+- WCAG 2.2 overview: https://www.w3.org/WAI/standards-guidelines/wcag/
+- W3C accessibility checks: https://www.w3.org/WAI/test-evaluate/easy-checks/
+- W3C evaluation overview: https://www.w3.org/WAI/test-evaluate/
+- W3C keyboard guidance: https://www.w3.org/WAI/WCAG21/Understanding/keyboard.html
+- W3C flashing guidance: https://www.w3.org/WAI/WCAG22/Understanding/three-flashes-or-below-threshold.html
+- United States DOJ web accessibility guidance: https://www.ada.gov/resources/web-guidance/
 
 ## Device support
 
@@ -89,53 +167,20 @@ JamScan can package:
 
 Unknown files are not executed or embedded as active content. They can only be downloaded after the warning is accepted.
 
-## Visual stream behavior
-
-The visual protocol uses three frame types:
-
-1. Start markers identify the stream and package.
-2. Data frames carry numbered pieces of the package.
-3. End markers close the current loop.
-
-The scanner waits for a start marker before accepting data. This means scanning can begin while a stream is already in the middle of a loop. Data seen before the next start marker is ignored.
-
-Each frame has a stream ID, cycle number, sequence number, data index, and CRC-32 value. The scanner can detect sequence gaps, count missed flashes, ignore duplicates, and keep missing data from earlier loops. Later loops fill any data frames that were missed.
-
-The order begins at a different data offset on later cycles. The number of repeated start and end markers also changes slightly. This helps devices with different refresh rates collect frames that were missed in an earlier loop.
-
-## Speed limits
-
-The Make page includes Reliable, Fast, Very fast, and Display maximum modes.
-
-Display maximum requests a 1 millisecond update interval, but a browser cannot show a separate visible image faster than the display refresh rate. A 60 Hz screen can show about 60 different flashes per second, a 120 Hz screen can show about 120, and the camera also has its own frame-rate limit.
-
-The Scan page uses `requestVideoFrameCallback` when the browser supports it, so decoding begins as soon as each new camera frame arrives. The decoder reads the canvas pixels once per camera frame and displays the measured decode time. A result below 1 millisecond may happen on fast hardware, but it cannot be guaranteed on every phone, computer, browser, or camera.
-
-Reliable or Fast mode is recommended for real camera transfers. Display maximum is mainly useful for testing high-refresh screens and fast cameras.
-
 ## Safety model
 
-Before recovered content is shown, JamScan displays a warning that covers:
+Before recovered content is shown, JamScan displays a warning covering:
 
 - Inappropriate or disturbing content
 - Scams and fake offers
 - Misleading links and impersonation
 - Malware and unsafe downloads
 
-The warning is not a guarantee that the file is safe. JamScan only checks package integrity.
-
-## Integrity checks
-
-- Every package stores a SHA-256 hash of its payload.
-- Every visual frame stores a CRC-32 value.
-- The complete visual package also has a CRC-32 value.
-- Duplicate frames are ignored during scanning.
-- Missing frames remain listed until a later loop supplies them.
-- Incomplete or corrupted packages fail verification.
+The warning is not proof that a file is safe. JamScan checks package integrity, not truth, legality, moderation, or malware.
 
 ## Large files
 
-The visual stream uses many frames. Large videos can take a long time to scan through a camera. Sharing the generated `.jscan` file is much faster for large content.
+A visual stream requires many frames. Large videos may take a long time to scan. Sending the generated `.jscan` file is much faster and more reliable for large content.
 
 The default source limit is 256 MB. It is defined in `assets/js/core.js` as `MAX_SOURCE_SIZE`.
 
@@ -145,15 +190,24 @@ The project uses plain HTML, CSS, and JavaScript. Java is not required.
 
 No dependency installation is needed.
 
-When changing the visual format, update both frame creation and frame scanning in `assets/js/core.js`. Format details are in `docs/FORMAT.md`.
+Run the protocol tests with:
+
+```bash
+npm test
+```
+
+The Node test uses a small built-in pixel canvas and checks package round trips, rotation, mirroring, camera-style crops, and later-loop recovery.
+
+When changing the visual protocol, update both frame creation and frame scanning in `assets/js/core.js`. Format details are in `docs/FORMAT.md`.
 
 ## Contributing
 
 1. Fork the project.
 2. Create a branch for the change.
 3. Keep comments short and related to the code.
-4. Test the Home, Make, Scan, and Open pages.
-5. Submit a pull request with a clear description.
+4. Test Home, Make, Scan, Open, and Accessibility.
+5. Test keyboard navigation and reduced motion.
+6. Submit a pull request with a clear description.
 
 ## License
 

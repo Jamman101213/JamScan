@@ -1,28 +1,17 @@
 # JamScan format
 
-JamScan uses two related formats:
-
-- The `.jscan` package stores metadata and the original payload.
-- The visual frame protocol sends that package through animated dot frames.
+This document describes the `.jscan` package and visual protocol used by this version of JamScan.
 
 ## `.jscan` package
 
-The package uses this order:
+A `.jscan` file contains:
 
-```text
-6 bytes   Magic and package version
-4 bytes   Metadata length, little endian
-N bytes   UTF-8 JSON metadata
-N bytes   Original payload
-```
+1. Six magic bytes: `JSCAN` followed by version byte `1`
+2. A four-byte little-endian JSON metadata length
+3. UTF-8 JSON metadata
+4. Raw payload bytes
 
-The magic bytes are:
-
-```text
-4A 53 43 41 4E 01
-```
-
-The metadata contains:
+Metadata fields include:
 
 - `app`
 - `version`
@@ -33,55 +22,83 @@ The metadata contains:
 - `created`
 - `sha256`
 
-## Visual grid
+The payload SHA-256 value is checked when a package is opened or reconstructed.
 
-Each visual frame uses a 64 by 64 black-and-white grid.
+## Visual protocol version 3
 
-The four 8 by 8 corners are reserved for finder markers. The remaining cells store the frame header and payload bits.
+Visual frames use a 48 by 48 data grid inside a 58 by 58 displayed module area.
 
-## Visual header version 2
+The displayed area contains:
 
-```text
-Byte 0      Magic A5
-Byte 1      Magic 5A
-Byte 2      Protocol version 02
-Byte 3      Frame type
-Bytes 4-6   Data index, little endian
-Bytes 7-9   Total data frame count, little endian
-Bytes 10-11 Payload length, little endian
-Bytes 12-15 Stream ID, little endian
-Bytes 16-19 Cycle number, little endian
-Bytes 20-23 Sequence number, little endian
-Bytes 24-27 Payload CRC-32, little endian
-```
+- A white outer margin
+- A solid black locator border
+- A white separator
+- The 48 by 48 data grid
 
-Frame types:
+Four 8 by 8 finder markers occupy the corners of the data grid. The finder cells are reserved and are not part of the byte payload.
 
-```text
-0 Start marker
-1 Data frame
-2 End marker
-```
+The remaining data area stores 256 bytes. Each frame uses:
 
-Start and end markers carry an 8-byte marker payload:
+- 28 bytes for the frame header
+- Up to 224 bytes for the frame payload
 
-```text
-Bytes 0-3 Package length, little endian
-Bytes 4-7 Complete package CRC-32, little endian
-```
+## Frame header
 
-Data frames carry up to 448 package bytes.
+| Offset | Size | Field |
+|---|---:|---|
+| 0 | 2 | Magic bytes `A5 5A` |
+| 2 | 1 | Visual protocol version `3` |
+| 3 | 1 | Frame type |
+| 4 | 3 | Data index |
+| 7 | 3 | Total data-frame count |
+| 10 | 2 | Payload length |
+| 12 | 4 | Stream ID |
+| 16 | 4 | Cycle number |
+| 20 | 4 | Sequence number |
+| 24 | 4 | Payload CRC-32 |
 
-## Loop rules
+Frame types are:
+
+- `0` - Start marker
+- `1` - Data frame
+- `2` - End marker
+
+Start and end markers carry an eight-byte payload:
+
+- Four-byte complete package length
+- Four-byte complete package CRC-32
+
+## Loop order
 
 Each loop contains:
 
-1. Repeated start markers
-2. Every data frame
-3. Repeated end markers
+1. Three start markers
+2. Every data frame, each displayed twice
+3. Two end markers
 
-The scanner does not accept data until it reads a valid start marker. It stores data by its data index, so repeated frames are ignored and later loops can fill missing indexes.
+Later loops begin at a different data index. This changes the order and helps recover frames missed because of display and camera timing.
 
-Sequence gaps are counted as missed flashes. A cycle change without a start marker makes the scanner wait for the next valid start marker.
+## Scanner rules
 
-The data starting offset changes between cycles. Start and end marker repeat counts also change slightly to reduce refresh-rate lockstep.
+- Data frames are ignored until a valid start marker is received.
+- A repeated start marker may begin a session even if the first start marker was missed.
+- Sequence gaps count missed displayed frames.
+- Duplicate data indexes are ignored.
+- Missing data remains stored across later loops.
+- A new cycle is not accepted until its start marker is received.
+- Every frame payload must pass CRC-32.
+- The reconstructed package must match its expected length and package CRC-32.
+- The final `.jscan` payload must pass SHA-256.
+
+## Image decoding
+
+The scanner:
+
+- Searches several centered crop sizes and offsets
+- Remembers the last successful crop
+- Uses the locator border for contrast and alignment checks
+- Tries four rotations
+- Tries mirrored and non-mirrored orientations
+- Uses a global threshold based on sampled dark and light modules
+
+The current decoder does not perform full perspective correction. The camera and source display should remain roughly parallel.

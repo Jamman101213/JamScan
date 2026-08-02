@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f4f1ea">
-  <meta name="description" content="Create animated JamScan dot streams and .jscan files.">
+  <meta name="theme-color" content="#071014">
+  <meta name="description" content="Create a camera-readable JamScan stream or portable .jscan file.">
   <title>Make - JamScan</title>
   <link rel="stylesheet" href="../assets/css/styles.css">
   <script src="../assets/js/device.js" defer></script>
@@ -13,52 +13,54 @@
   <script src="../assets/js/make.js" defer></script>
 </head>
 <body data-page="make">
-  <!-- Main navigation -->
+  <a class="skip-link" href="#mainContent">Skip to main content</a>
+
   <header class="site-header">
     <a class="brand" href="../" aria-label="JamScan home">
       <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-      <span><strong>JamScan</strong><small>Animated dot sharing</small></span>
+      <span><strong>JamScan</strong><small>Camera-readable file sharing</small></span>
     </a>
     <button class="menu-button" id="menuButton" type="button" aria-expanded="false" aria-controls="siteNav">Menu</button>
     <nav class="site-nav" id="siteNav" aria-label="Main navigation">
       <a href="../">Home</a>
-      <a class="active" href="./">Make</a>
+      <a aria-current="page" href="./">Make</a>
       <a href="../scan/">Scan</a>
       <a href="../open/">Open</a>
+      <a href="../accessibility/">Accessibility</a>
     </nav>
     <div class="device-label" data-device-label>Checking device</div>
   </header>
 
-  <main class="section-wrap page-main">
-    <!-- Page heading -->
+  <main class="section-wrap page-main" id="mainContent">
     <section class="page-heading">
       <p class="kicker">Make</p>
       <h1>Create a JamScan</h1>
-      <p>Choose a file or enter text. JamScan will build a verified package and an animated dot stream.</p>
+      <p>Build the package locally, save it as a .jscan file, or start the camera-readable stream when both devices are ready.</p>
     </section>
 
+    <div class="safety-box"><strong>Motion safety:</strong> streams do not autoplay. The default rate is 2 frames per second and the maximum option is 3 frames per second. A warning appears before motion starts.</div>
+
     <section class="workspace-grid">
-      <!-- Create form -->
       <article class="panel-card">
         <div class="panel-heading">
           <h2>Choose content</h2>
-          <p>Files are processed locally in your browser.</p>
+          <p>Files stay in this browser while the package is built.</p>
         </div>
 
-        <div class="mode-switch" role="group" aria-label="Content type">
-          <button class="mode-button active" id="fileModeButton" type="button">File or media</button>
-          <button class="mode-button" id="textModeButton" type="button">Text</button>
+        <div class="mode-switch" role="group" aria-label="Content source">
+          <button class="mode-button active" id="fileModeButton" type="button" aria-pressed="true">File or media</button>
+          <button class="mode-button" id="textModeButton" type="button" aria-pressed="false">Text</button>
         </div>
 
         <div id="fileMode">
           <input id="sourceFile" type="file" hidden>
-          <div class="drop-zone" id="sourceDrop" tabindex="0" role="button">
+          <div class="drop-zone" id="sourceDrop" tabindex="0" role="button" aria-label="Select a file or drop a file here">
             <strong>Drop a file here</strong>
             <span>or select a file</span>
             <small>Maximum size: 256 MB</small>
           </div>
           <div class="file-row hidden" id="sourceFileRow">
-            <div class="file-kind" id="sourceKind">FILE</div>
+            <div class="file-kind" id="sourceKind" aria-hidden="true">FILE</div>
             <div class="file-data">
               <strong id="sourceName"></strong>
               <span id="sourceDetails"></span>
@@ -82,31 +84,29 @@
           <button class="button primary" id="buildButton" type="button">Build JamScan</button>
           <button class="button" id="downloadButton" type="button" disabled>Save .jscan</button>
         </div>
-        <div class="status-box" id="buildStatus">Choose content, then build the package.</div>
+        <div class="status-box" id="buildStatus" role="status" aria-live="polite">Choose content, then build the package.</div>
       </article>
 
-      <!-- Dot stream -->
       <article class="panel-card stream-card">
         <div class="panel-heading">
-          <h2>Animated dot stream</h2>
-          <p>Show this square on one device and scan it from another.</p>
+          <h2>Camera-readable stream</h2>
+          <p>Keep the full white margin and black border visible on the scanning device.</p>
         </div>
 
         <div class="canvas-shell" id="canvasShell">
-          <canvas id="streamCanvas" width="640" height="640" aria-label="JamScan animated dot stream"></canvas>
+          <canvas id="streamCanvas" width="720" height="720" aria-label="JamScan dot stream"></canvas>
           <div class="canvas-empty" id="streamEmpty"><strong>No stream loaded</strong><span>Build a package to create frames.</span></div>
         </div>
 
         <div class="stream-controls">
-          <button class="button dark" id="playButton" type="button" disabled>Play</button>
-          <button class="button" id="restartButton" type="button" disabled>Restart</button>
+          <button class="button dark" id="playButton" type="button" aria-pressed="false" disabled>Start stream</button>
+          <button class="button" id="restartButton" type="button" disabled>Restart loop</button>
           <button class="button" id="fullscreenButton" type="button" disabled>Fullscreen</button>
-          <label class="speed-control">Speed
+          <label class="speed-control">Stream rate
             <select id="speedSelect">
-              <option value="125">Reliable</option>
-              <option value="67" selected>Fast</option>
-              <option value="33">Very fast</option>
-              <option value="1">Display maximum</option>
+              <option value="1000">Reduced motion - 1 fps</option>
+              <option value="500" selected>Reliable - 2 fps</option>
+              <option value="334">Quick - 3 fps</option>
             </select>
           </label>
         </div>
@@ -116,21 +116,38 @@
           <div class="metric"><span>Current</span><strong id="metricCurrent">-</strong></div>
           <div class="metric"><span>Package size</span><strong id="metricSize">-</strong></div>
           <div class="metric"><span>Loop time</span><strong id="metricTime">-</strong></div>
-          <div class="metric"><span>Actual rate</span><strong id="metricRate">-</strong></div>
+          <div class="metric"><span>Stream rate</span><strong id="metricRate">-</strong></div>
           <div class="metric"><span>Cycle</span><strong id="metricCycle">-</strong></div>
         </div>
 
-        <div class="notice-box">Each loop starts with repeated start markers and ends with end markers. Display maximum requests a 1 ms update, but visible flashes are limited by the screen refresh rate. Reliable or Fast is better for camera transfers.</div>
+        <div class="notice-box">For the best scan, use Reliable mode, raise the display brightness, keep both devices still and parallel, and avoid glare. Every data frame appears twice.</div>
       </article>
     </section>
   </main>
 
-  <!-- Page footer -->
+  <dialog class="flash-dialog" id="flashSafetyDialog" aria-labelledby="flashSafetyTitle" aria-describedby="flashSafetyText">
+    <div class="dialog-heading">
+      <div class="warning-symbol" aria-hidden="true">!</div>
+      <div>
+        <h2 id="flashSafetyTitle">Moving high-contrast pattern</h2>
+        <p id="flashSafetyText">The JamScan square changes between black-and-white frames.</p>
+      </div>
+    </div>
+    <div class="dialog-body">
+      <p>Do not start the stream for anyone who is sensitive to flashing or changing patterns. Keep the selected rate at 3 frames per second or lower. Stop immediately if anyone feels unwell.</p>
+      <p>For a nonvisual and nonflashing transfer, use the Save .jscan button and send the file directly.</p>
+    </div>
+    <div class="dialog-actions">
+      <button class="button" id="flashSafetyCancel" type="button">Cancel</button>
+      <button class="button primary" id="flashSafetyStart" type="button">I understand, start stream</button>
+    </div>
+  </dialog>
+
   <footer class="site-footer section-wrap">
     <span>JamScan open source project</span>
-    <span><a href="../README.md">README</a> and <a href="../LICENSE">MIT License</a></span>
+    <span><a href="../README.md">README</a> - <a href="../ACCESSIBILITY.md">Accessibility</a> - <a href="../LEGAL.md">Legal notes</a> - <a href="../LICENSE">MIT License</a></span>
   </footer>
 
-  <div class="toast" id="toast" role="status"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

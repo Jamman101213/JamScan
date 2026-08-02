@@ -14,9 +14,7 @@
     playing: false,
     animationId: null,
     lastFrameTime: 0,
-    measuredFps: 0,
-    measuredFrames: 0,
-    measuredStarted: 0
+    safetyAccepted: false
   };
 
   const core = window.JamScanCore;
@@ -34,6 +32,8 @@
     element("textModeButton").classList.toggle("active", mode === "text");
     element("fileMode").classList.toggle("hidden", mode !== "file");
     element("textMode").classList.toggle("hidden", mode !== "text");
+    element("fileModeButton").setAttribute("aria-pressed", String(mode === "file"));
+    element("textModeButton").setAttribute("aria-pressed", String(mode === "text"));
   }
 
   // Select file
@@ -65,17 +65,15 @@
     return Number(element("speedSelect").value);
   }
 
-  function getEstimatedFps() {
-    const delay = getDelay();
-    if (delay <= 1) return state.measuredFps || 60;
-    return 1000 / delay;
+  function getFps() {
+    return 1000 / getDelay();
   }
 
   // Stream metrics
   function updateMetrics() {
     const dataFrames = state.stream ? state.stream.total : 0;
     const current = state.frames[state.frameIndex];
-    const estimatedFps = getEstimatedFps();
+    const fps = getFps();
 
     element("metricFrames").textContent = dataFrames ? dataFrames.toLocaleString() : "-";
     element("metricCurrent").textContent = current
@@ -85,13 +83,9 @@
       : "-";
     element("metricSize").textContent = state.packageBytes ? core.formatBytes(state.packageBytes.length) : "-";
     element("metricTime").textContent = state.frames.length
-      ? core.formatDuration(state.frames.length / estimatedFps)
+      ? core.formatDuration(state.frames.length / fps)
       : "-";
-    element("metricRate").textContent = state.playing && state.measuredFps
-      ? `${state.measuredFps.toFixed(0)} fps`
-      : getDelay() <= 1
-        ? "Refresh limit"
-        : `${estimatedFps.toFixed(0)} fps`;
+    element("metricRate").textContent = `${fps.toFixed(fps < 2 ? 1 : 0)} fps`;
     element("metricCycle").textContent = state.stream ? String(state.cycle + 1) : "-";
   }
 
@@ -114,7 +108,9 @@
   // Playback stop
   function stopPlayback() {
     state.playing = false;
-    element("playButton").textContent = "Play";
+    element("playButton").textContent = "Start stream";
+    element("playButton").setAttribute("aria-pressed", "false");
+    document.body.classList.remove("stream-running");
 
     if (state.animationId !== null) cancelAnimationFrame(state.animationId);
     state.animationId = null;
@@ -138,19 +134,17 @@
       }
 
       showFrame();
-      state.measuredFrames += 1;
-
-      if (!state.measuredStarted) state.measuredStarted = time;
-      const measuredTime = time - state.measuredStarted;
-
-      if (measuredTime >= 1000) {
-        state.measuredFps = (state.measuredFrames * 1000) / measuredTime;
-        state.measuredFrames = 0;
-        state.measuredStarted = time;
-        updateMetrics();
-      }
     }
 
+    state.animationId = requestAnimationFrame(playbackStep);
+  }
+
+  // Start playback
+  function startPlayback() {
+    state.playing = true;
+    element("playButton").textContent = "Pause stream";
+    element("playButton").setAttribute("aria-pressed", "true");
+    document.body.classList.add("stream-running");
     state.animationId = requestAnimationFrame(playbackStep);
   }
 
@@ -163,12 +157,12 @@
       return;
     }
 
-    state.playing = true;
-    state.measuredFrames = 0;
-    state.measuredStarted = 0;
-    state.measuredFps = 0;
-    element("playButton").textContent = "Pause";
-    state.animationId = requestAnimationFrame(playbackStep);
+    if (!state.safetyAccepted) {
+      element("flashSafetyDialog").showModal();
+      return;
+    }
+
+    startPlayback();
   }
 
   // Build package
@@ -262,12 +256,30 @@
     });
 
     element("speedSelect").addEventListener("change", () => {
-      state.measuredFps = 0;
+      stopPlayback();
       updateMetrics();
     });
 
+    element("flashSafetyCancel").addEventListener("click", () => {
+      element("flashSafetyDialog").close();
+    });
+
+    element("flashSafetyStart").addEventListener("click", () => {
+      state.safetyAccepted = true;
+      element("flashSafetyDialog").close();
+      startPlayback();
+    });
+
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      element("speedSelect").value = "1000";
+    }
+
+    setMode("file");
     updateMetrics();
     window.addEventListener("beforeunload", stopPlayback);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopPlayback();
+    });
   }
 
   document.addEventListener("DOMContentLoaded", startPage);
