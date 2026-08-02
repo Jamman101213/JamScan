@@ -3,7 +3,7 @@
 JamScan uses two related formats:
 
 - The `.jscan` package stores metadata and the original payload.
-- The visual protocol sends that package through changing 64-tile mosaics.
+- The visual protocol sends that package through changing optical mosaics.
 
 ## `.jscan` package
 
@@ -20,7 +20,7 @@ The magic bytes are:
 4A 53 43 41 4E 01
 ```
 
-## Mosaic layout
+## Stable 64-tile mosaic
 
 The default visual frame is a 252 by 252 logical-module square:
 
@@ -32,62 +32,87 @@ The default visual frame is a 252 by 252 logical-module square:
 64           Total tiles
 ```
 
-The 64 tiles touch directly. No divider modules are inserted between them.
+The tiles touch directly. No divider modules are inserted between them.
 
-Four 11 by 11 corner markers are placed at the outer corners. Each marker has a two-module black outer ring and a three-by-three black center. White space between the markers and tile area prevents the markers from connecting to tile data.
+Each stable tile contains a complete 36-byte optical header and a 40-byte fountain repair payload. Header and payload CRC-32 values allow damaged tiles to be skipped.
 
-## Tile packet
+## Experimental dense mosaic container
 
-Each tile stores one complete fountain frame packet:
+Both dense formats use a 640 by 640 logical-module outer square.
 
-```text
-36 bytes   Frame header
-40 bytes   Fountain repair payload
-76 bytes   Total meaningful tile data
-```
+The container includes:
 
-The remaining tile cells contain deterministic filler bits. Filler makes the black-and-white balance stable but is not part of the payload.
+- Four corner locator markers.
+- One 32-byte stream header repeated at the top, right, bottom, and left.
+- One seamless central data grid with no internal divider lines.
 
-## Visual header version 4
+The repeated header stores:
 
 ```text
-Bytes 0-1    Magic A5 5A
-Byte 2       Protocol version 04
-Byte 3       Frame type 03
-Bytes 4-7    Sequence number, little endian
-Bytes 8-11   Source block count, little endian
-Bytes 12-13  Source block size, little endian
-Bytes 14-15  Reserved
+Bytes 0-1    Dense magic D5 3A
+Byte 2       Dense protocol version 05
+Byte 3       Density profile ID
+Byte 4       Header side ID
+Byte 5       Reserved
+Bytes 6-9    Base sequence number, little endian
+Bytes 10-13  Source block count, little endian
+Bytes 14-15  Source block size, little endian
 Bytes 16-19  Complete package length, little endian
 Bytes 20-23  Stream ID, little endian
 Bytes 24-27  Complete package CRC-32, little endian
-Bytes 28-31  Repair payload CRC-32, little endian
-Bytes 32-35  Header CRC-32, little endian
+Bytes 28-31  Header CRC-32, little endian
 ```
 
-The source block size is 40 bytes in the 64-tile mosaic release.
+Repeating the header on all four sides allows the scanner to determine rotation before reading the compact tile grid.
+
+## 1024 experimental profile
+
+```text
+Profile ID       1
+Grid             32 by 32
+Data tiles       1024
+Tile size        15 by 15 modules
+Fountain block   24 bytes
+Tile checksum    CRC-16/CCITT
+```
+
+Each tile stores 24 payload bytes followed by a 2-byte CRC-16 value. Remaining cells are deterministic filler.
+
+## 4028 experimental profile
+
+```text
+Profile ID       2
+Grid             64 by 63
+Grid positions   4032
+Reserved corners 4
+Data tiles       4028
+Tile size        9 by 9 modules
+Fountain block   8 bytes
+Tile checksum    CRC-16/CCITT
+```
+
+The four data-grid corner positions are reserved, producing exactly 4028 compact data tiles. Each tile stores 8 payload bytes followed by a 2-byte CRC-16 value. One remaining cell is deterministic filler.
 
 ## Scanner steps
 
 1. Read one camera image.
 2. Try the previously locked mosaic corners.
-3. If needed, search for the four large corner markers.
-4. Estimate the complete mosaic quadrilateral.
-5. Correct perspective for the whole mosaic.
-6. Sample the 64 fixed tile positions.
-7. Try rotation and mirroring for each tile.
-8. Validate tile magic, header CRC, and payload CRC.
-9. Accept every clean new sequence number.
-10. Skip damaged or duplicate tiles.
-11. Continue until the fountain decoder solves all source blocks.
-12. Verify package length, package CRC-32, and payload SHA-256.
+3. If needed, search for the four outer locator markers.
+4. Correct perspective for the complete mosaic.
+5. Look for a valid repeated dense header.
+6. If a dense header is found, select its 1024 or 4028 profile and rotation.
+7. Sample every known compact tile position.
+8. Accept compact tiles whose CRC-16 values pass.
+9. If no dense header is found, try the stable 64-tile format.
+10. Continue until the fountain decoder solves all source blocks.
+11. Verify package length, package CRC-32, and payload SHA-256.
 
-A camera image does not need to decode all 64 tiles. Partial mosaics are useful and later mosaics provide new repair data.
+A camera image does not need to decode every tile. Partial mosaics remain useful because later mosaics provide new fountain repair data.
 
 ## Repair stream
 
-The visual protocol is continuous and has no required start marker or fixed ending. Every tile is self-describing and can create or join a session using its stream ID and package metadata.
+The optical protocol is continuous and has no required first frame. Every displayed mosaic uses a new base sequence number. The receiver can begin at any point and continue until enough fountain equations have been collected.
 
-JamScan uses an LT fountain encoder with a robust-soliton degree distribution. The fountain implementation in `assets/js/fountain.js` is adapted from Decimen Optical Transfer under its MIT License.
+The fountain implementation in `assets/js/fountain.js` is adapted from Decimen Optical Transfer under its MIT License.
 
-JamScan's visual mosaic and `.jscan` package are not wire-compatible with Decimen Optical Transfer.
+JamScan's optical formats and `.jscan` package are not wire-compatible with Decimen Optical Transfer.

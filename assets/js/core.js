@@ -12,13 +12,51 @@
   const FRAME_HEADER_BYTES = 36;
   const MAX_PAYLOAD = 40;
 
-  // 64-tile mosaic settings
+  // Stable 64-tile mosaic settings
   const MOSAIC_SIDE = 8;
   const MOSAIC_COUNT = MOSAIC_SIDE * MOSAIC_SIDE;
   const MOSAIC_TILE = 28;
   const MOSAIC_MARGIN = 14;
   const MOSAIC_MARKER = 11;
   const MOSAIC_GRID = MOSAIC_MARGIN * 2 + MOSAIC_TILE * MOSAIC_SIDE;
+
+  // Experimental dense mosaic settings
+  const DENSE_GRID = 640;
+  const DENSE_HEADER_SIDE = 16;
+  const DENSE_HEADER_DRAW_SIZE = 24;
+  const DENSE_HEADER_BYTES = 32;
+  const DENSE_MARKER_SIZE = 28;
+  const DENSE_VERSION = 5;
+  const DENSE_PROFILES = Object.freeze({
+    1024: Object.freeze({
+      id: 1,
+      name: "1024 experimental",
+      count: 1024,
+      columns: 32,
+      rows: 32,
+      tileSide: 15,
+      blockSize: 24,
+      canvasSize: 3072,
+      dataX: 80,
+      dataY: 80
+    }),
+    4028: Object.freeze({
+      id: 2,
+      name: "4028 experimental",
+      count: 4028,
+      columns: 64,
+      rows: 63,
+      tileSide: 9,
+      blockSize: 8,
+      canvasSize: 4096,
+      dataX: 32,
+      dataY: 36
+    })
+  });
+  const DENSE_PROFILE_BY_ID = Object.freeze({
+    1: DENSE_PROFILES[1024],
+    2: DENSE_PROFILES[4028]
+  });
   const MAX_SOURCE_SIZE = 256 * 1024 * 1024;
   const FRAME_VERSION = 4;
   const MAGIC = new Uint8Array([0x4a, 0x53, 0x43, 0x41, 0x4e, 0x01]);
@@ -316,15 +354,30 @@
     return (current ^ 0xffffffff) >>> 0;
   }
 
+  // Small tile checksum
+  function crc16(bytes) {
+    let current = 0xffff;
+
+    for (const byte of bytes) {
+      current ^= byte << 8;
+      for (let bit = 0; bit < 8; bit += 1) {
+        current = current & 0x8000 ? ((current << 1) ^ 0x1021) & 0xffff : (current << 1) & 0xffff;
+      }
+    }
+
+    return current;
+  }
+
   // Create stream
-  function createStream(packageBytes) {
+  function createStream(packageBytes, blockSize = MAX_PAYLOAD) {
+    const safeBlockSize = Math.max(1, Math.min(65535, Number(blockSize) || MAX_PAYLOAD));
     const streamId = crypto.getRandomValues(new Uint32Array(1))[0];
-    const encoder = new window.JamScanFountain.Encoder(packageBytes, MAX_PAYLOAD, streamId);
+    const encoder = new window.JamScanFountain.Encoder(packageBytes, safeBlockSize, streamId);
 
     return {
       streamId,
       total: encoder.blockCount,
-      blockSize: MAX_PAYLOAD,
+      blockSize: safeBlockSize,
       packageLength: packageBytes.length,
       packageCRC: crc32(packageBytes),
       encoder
@@ -490,6 +543,208 @@
     drawMosaicMarker(context, left + codeSide - MOSAIC_MARKER * moduleSize, top, moduleSize);
     drawMosaicMarker(context, left + codeSide - MOSAIC_MARKER * moduleSize, top + codeSide - MOSAIC_MARKER * moduleSize, moduleSize);
     drawMosaicMarker(context, left, top + codeSide - MOSAIC_MARKER * moduleSize, moduleSize);
+  }
+
+  // Find a transfer profile
+  function getTransferProfile(mode) {
+    const value = Number(mode);
+    if (value === 1024 || value === 4028) return DENSE_PROFILES[value];
+    return null;
+  }
+
+  // Dense tile positions
+  const densePositionCache = new Map();
+  function getDensePositions(profile) {
+    if (densePositionCache.has(profile.count)) return densePositionCache.get(profile.count);
+
+    const positions = [];
+    for (let row = 0; row < profile.rows; row += 1) {
+      for (let column = 0; column < profile.columns; column += 1) {
+        const isCorner =
+          (column === 0 || column === profile.columns - 1) &&
+          (row === 0 || row === profile.rows - 1);
+        if (profile.count === 4028 && isCorner) continue;
+        positions.push({ column, row });
+        if (positions.length >= profile.count) break;
+      }
+      if (positions.length >= profile.count) break;
+    }
+
+    densePositionCache.set(profile.count, positions);
+    return positions;
+  }
+
+  // Dense header position
+  function denseHeaderPosition(side) {
+    const center = Math.floor((DENSE_GRID - DENSE_HEADER_DRAW_SIZE) / 2);
+    const edge = 4;
+    if (side === 0) return { x: center, y: edge };
+    if (side === 1) return { x: DENSE_GRID - DENSE_HEADER_DRAW_SIZE - edge, y: center };
+    if (side === 2) return { x: center, y: DENSE_GRID - DENSE_HEADER_DRAW_SIZE - edge };
+    return { x: edge, y: center };
+  }
+
+  // Dense stream header
+  function createDenseHeader(profile, stream, baseSequence, side) {
+    const header = new Uint8Array(DENSE_HEADER_BYTES);
+    header[0] = 0xd5;
+    header[1] = 0x3a;
+    header[2] = DENSE_VERSION;
+    header[3] = profile.id;
+    header[4] = side & 3;
+    header[5] = 0;
+    writeU32(header, 6, baseSequence >>> 0);
+    writeU32(header, 10, stream.total >>> 0);
+    header[14] = stream.blockSize & 255;
+    header[15] = (stream.blockSize >>> 8) & 255;
+    writeU32(header, 16, stream.packageLength >>> 0);
+    writeU32(header, 20, stream.streamId >>> 0);
+    writeU32(header, 24, stream.packageCRC >>> 0);
+    writeU32(header, 28, crc32(header.slice(0, 28)));
+    return header;
+  }
+
+  // Draw a matrix without separator lines
+  function drawBitMatrix(context, bits, side, left, top, moduleSize, seed) {
+    const random = xorshift(seed >>> 0);
+    let bitIndex = 0;
+
+    for (let y = 0; y < side; y += 1) {
+      for (let x = 0; x < side; x += 1) {
+        const bit = bitIndex < bits.length ? bits[bitIndex++] : random() > 0.5 ? 1 : 0;
+        if (!bit) continue;
+        context.fillStyle = "#111111";
+        context.fillRect(left + x * moduleSize, top + y * moduleSize, moduleSize, moduleSize);
+      }
+    }
+  }
+
+  // Draw a matrix inside a larger logical square
+  function drawScaledBitMatrix(context, bits, bitSide, drawSide, left, top, moduleSize, seed) {
+    const random = xorshift(seed >>> 0);
+    const cell = (drawSide * moduleSize) / bitSide;
+    let bitIndex = 0;
+
+    for (let y = 0; y < bitSide; y += 1) {
+      for (let x = 0; x < bitSide; x += 1) {
+        const bit = bitIndex < bits.length ? bits[bitIndex++] : random() > 0.5 ? 1 : 0;
+        if (!bit) continue;
+        context.fillStyle = "#111111";
+        context.fillRect(left + x * cell, top + y * cell, cell + 0.2, cell + 0.2);
+      }
+    }
+  }
+
+  // Draw a dense locator
+  function drawDenseMarker(context, left, top, size) {
+    const cell = size / MOSAIC_MARKER;
+    context.fillStyle = "#ffffff";
+    context.fillRect(left, top, size, size);
+    context.fillStyle = "#111111";
+
+    for (let y = 0; y < MOSAIC_MARKER; y += 1) {
+      for (let x = 0; x < MOSAIC_MARKER; x += 1) {
+        if (!mosaicMarkerBit(x, y)) continue;
+        context.fillRect(left + x * cell, top + y * cell, cell + 0.35, cell + 0.35);
+      }
+    }
+  }
+
+  // Draw one compact repair tile
+  function drawDenseTile(context, profile, stream, sequence, left, top, moduleSize) {
+    const payload = stream.encoder.encode(sequence >>> 0);
+    const checksum = crc16(payload);
+    const packet = new Uint8Array(payload.length + 2);
+    packet.set(payload, 0);
+    packet[packet.length - 2] = (checksum >>> 8) & 255;
+    packet[packet.length - 1] = checksum & 255;
+    drawBitMatrix(
+      context,
+      bytesToBits(packet),
+      profile.tileSide,
+      left,
+      top,
+      moduleSize,
+      stream.streamId ^ sequence ^ 0x64656e73
+    );
+  }
+
+  // Draw one experimental dense mosaic
+  function renderDenseMosaic(canvas, stream, baseSequence, mode) {
+    const profile = getTransferProfile(mode);
+    if (!profile) throw new Error("Unknown dense mosaic mode");
+
+    if (canvas.width !== profile.canvasSize || canvas.height !== profile.canvasSize) {
+      canvas.width = profile.canvasSize;
+      canvas.height = profile.canvasSize;
+    }
+
+    const context = canvas.getContext("2d", { alpha: false });
+    const maximumCodeSide = Math.floor(Math.min(canvas.width, canvas.height) * 0.98);
+    const moduleSize = Math.max(1, Math.floor(maximumCodeSide / DENSE_GRID));
+    const codeSide = moduleSize * DENSE_GRID;
+    const left = Math.floor((canvas.width - codeSide) / 2);
+    const top = Math.floor((canvas.height - codeSide) / 2);
+
+    context.imageSmoothingEnabled = false;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    const positions = getDensePositions(profile);
+    for (let index = 0; index < positions.length; index += 1) {
+      const position = positions[index];
+      drawDenseTile(
+        context,
+        profile,
+        stream,
+        (baseSequence + index) >>> 0,
+        left + (profile.dataX + position.column * profile.tileSide) * moduleSize,
+        top + (profile.dataY + position.row * profile.tileSide) * moduleSize,
+        moduleSize
+      );
+    }
+
+    for (let side = 0; side < 4; side += 1) {
+      const position = denseHeaderPosition(side);
+      const header = createDenseHeader(profile, stream, baseSequence, side);
+      drawScaledBitMatrix(
+        context,
+        bytesToBits(header),
+        DENSE_HEADER_SIDE,
+        DENSE_HEADER_DRAW_SIZE,
+        left + position.x * moduleSize,
+        top + position.y * moduleSize,
+        moduleSize,
+        stream.streamId ^ baseSequence ^ side
+      );
+    }
+
+    const markerSize = DENSE_MARKER_SIZE * moduleSize;
+    drawDenseMarker(context, left, top, markerSize);
+    drawDenseMarker(context, left + codeSide - markerSize, top, markerSize);
+    drawDenseMarker(context, left + codeSide - markerSize, top + codeSide - markerSize, markerSize);
+    drawDenseMarker(context, left, top + codeSide - markerSize, markerSize);
+  }
+
+  // Draw the selected transfer mode
+  function renderTransfer(canvas, stream, baseSequence, mode) {
+    const profile = getTransferProfile(mode);
+    if (profile) {
+      renderDenseMosaic(canvas, stream, baseSequence, mode);
+      return;
+    }
+
+    if (canvas.width !== 1080 || canvas.height !== 1080) {
+      canvas.width = 1080;
+      canvas.height = 1080;
+    }
+
+    const count = Number(mode) === 1 ? 1 : MOSAIC_COUNT;
+    const frames = [];
+    for (let index = 0; index < count; index += 1) {
+      frames.push(createFountainFrame(stream, (baseSequence + index) >>> 0));
+    }
+    renderFrameGrid(canvas, frames);
   }
 
   // Draw one code
@@ -1193,14 +1448,14 @@
     }
 
     candidates.sort((left, right) => right.score - left.score);
-    return candidates.slice(0, 12);
+    return candidates.slice(0, 40);
   }
 
   // Select one marker rectangle
   function selectMosaicCorners(candidates, width, height) {
     if (candidates.length < 4) throw new Error("Mosaic markers not found");
     let best = null;
-    const list = candidates.slice(0, 10);
+    const list = candidates.slice(0, 20);
 
     for (let a = 0; a < list.length - 3; a += 1) {
       for (let b = a + 1; b < list.length - 2; b += 1) {
@@ -1239,6 +1494,228 @@
 
     if (!best) throw new Error("Mosaic shape not found");
     return [best.tl.corners[0], best.tr.corners[1], best.br.corners[2], best.bl.corners[3]];
+  }
+
+  // Parse one dense header
+  function parseDenseHeader(bytes) {
+    if (bytes.length < DENSE_HEADER_BYTES) throw new Error("Dense header incomplete");
+    if (bytes[0] !== 0xd5 || bytes[1] !== 0x3a || bytes[2] !== DENSE_VERSION) {
+      throw new Error("Dense header signature mismatch");
+    }
+
+    const profile = DENSE_PROFILE_BY_ID[bytes[3]];
+    if (!profile) throw new Error("Unknown dense profile");
+    const expectedCRC = readU32(bytes, 28);
+    if (crc32(bytes.slice(0, 28)) !== expectedCRC) throw new Error("Dense header CRC mismatch");
+
+    const blockSize = bytes[14] | (bytes[15] << 8);
+    if (blockSize !== profile.blockSize) throw new Error("Dense block size mismatch");
+
+    return {
+      profile,
+      side: bytes[4] & 3,
+      baseSequence: readU32(bytes, 6),
+      total: readU32(bytes, 10),
+      blockSize,
+      packageLength: readU32(bytes, 16),
+      streamId: readU32(bytes, 20),
+      packageCRC: readU32(bytes, 24)
+    };
+  }
+
+  // Decode a dense header in any rotation
+  function decodeDenseHeader(bits) {
+    let current = bits;
+
+    for (let rotation = 0; rotation < 4; rotation += 1) {
+      try {
+        return { header: parseDenseHeader(bitsToBytes(current)), bitRotation: rotation };
+      } catch {
+        current = rotateSquareGrid(current, DENSE_HEADER_SIDE);
+      }
+    }
+
+    throw new Error("Dense header damaged");
+  }
+
+  // Rotate code coordinates into camera coordinates
+  function rotateDenseUV(u, v, rotation) {
+    if (rotation === 1) return { u: 1 - v, v: u };
+    if (rotation === 2) return { u: 1 - u, v: 1 - v };
+    if (rotation === 3) return { u: v, v: 1 - u };
+    return { u, v };
+  }
+
+  // Sample one square bit matrix
+  function sampleDenseMatrix(gray, width, height, map, x, y, side, rotation = 0, logicalSize = side) {
+    const levels = new Uint8Array(side * side);
+    const step = logicalSize / side;
+
+    for (let row = 0; row < side; row += 1) {
+      for (let column = 0; column < side; column += 1) {
+        const codeU = (x + (column + 0.5) * step) / DENSE_GRID;
+        const codeV = (y + (row + 0.5) * step) / DENSE_GRID;
+        const rotated = rotateDenseUV(codeU, codeV, rotation);
+        const point = projectPoint(map, rotated.u, rotated.v);
+        levels[row * side + column] = Math.round(sampleGray(gray, width, height, point.x, point.y));
+      }
+    }
+
+    return levels;
+  }
+
+  // Turn sampled levels into bits
+  function levelsToBits(levels, threshold) {
+    const bits = new Uint8Array(levels.length);
+    for (let index = 0; index < levels.length; index += 1) bits[index] = levels[index] <= threshold ? 1 : 0;
+    return bits;
+  }
+
+  // Find the dense header and orientation
+  function readDenseHeader(gray, width, height, map) {
+    const globalThreshold = getThreshold(gray);
+    let lastError = new Error("Dense header not found");
+
+    for (let imageSide = 0; imageSide < 4; imageSide += 1) {
+      const position = denseHeaderPosition(imageSide);
+      const levels = sampleDenseMatrix(gray, width, height, map, position.x, position.y, DENSE_HEADER_SIDE, 0, DENSE_HEADER_DRAW_SIZE);
+      let minimum = 255;
+      let maximum = 0;
+      for (const value of levels) {
+        if (value < minimum) minimum = value;
+        if (value > maximum) maximum = value;
+      }
+      const localThreshold = Math.round((minimum + maximum) / 2);
+      const thresholds = [globalThreshold, localThreshold, globalThreshold - 10, globalThreshold + 10];
+
+      for (const threshold of thresholds) {
+        try {
+          const decoded = decodeDenseHeader(levelsToBits(levels, threshold));
+          const rotation = (imageSide - decoded.header.side + 4) % 4;
+          return { ...decoded.header, rotation };
+        } catch (error) {
+          lastError = error;
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
+  // Decode one compact tile
+  function sampleDenseTile(gray, width, height, map, header, position, sequence, globalThreshold) {
+    const profile = header.profile;
+    const x = profile.dataX + position.column * profile.tileSide;
+    const y = profile.dataY + position.row * profile.tileSide;
+    const levels = sampleDenseMatrix(gray, width, height, map, x, y, profile.tileSide, header.rotation);
+    let minimum = 255;
+    let maximum = 0;
+    for (const value of levels) {
+      if (value < minimum) minimum = value;
+      if (value > maximum) maximum = value;
+    }
+    if (maximum - minimum < 18) throw new Error("Low contrast");
+
+    const localThreshold = Math.round((minimum + maximum) / 2);
+    const thresholds = [globalThreshold, localThreshold, globalThreshold - 9, globalThreshold + 9];
+    const needed = profile.blockSize + 2;
+    let lastError = new Error("Dense tile damaged");
+
+    for (const threshold of thresholds) {
+      const bytes = bitsToBytes(levelsToBits(levels, threshold)).slice(0, needed);
+      if (bytes.length < needed) continue;
+      const payload = bytes.slice(0, profile.blockSize);
+      const expected = (bytes[profile.blockSize] << 8) | bytes[profile.blockSize + 1];
+      if (crc16(payload) !== expected) {
+        lastError = new Error("Dense tile CRC mismatch");
+        continue;
+      }
+
+      return {
+        header: new Uint8Array(0),
+        payload,
+        type: FRAME_TYPE.FOUNTAIN,
+        index: sequence >>> 0,
+        total: header.total,
+        streamId: header.streamId,
+        cycle: 0,
+        sequence: sequence >>> 0,
+        packageLength: header.packageLength,
+        packageCRC: header.packageCRC,
+        blockSize: header.blockSize,
+        densityMode: profile.count
+      };
+    }
+
+    throw lastError;
+  }
+
+  // Expand locator corners from pixel centers to the outer code edge
+  function expandDenseCorners(corners, pixels = 0.75) {
+    const center = corners.reduce((sum, point) => ({ x: sum.x + point.x / 4, y: sum.y + point.y / 4 }), { x: 0, y: 0 });
+    return corners.map(point => {
+      const dx = point.x - center.x;
+      const dy = point.y - center.y;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      const scale = (distance + pixels) / distance;
+      return { x: center.x + dx * scale, y: center.y + dy * scale };
+    });
+  }
+
+  // Read one dense mosaic
+  function sampleDenseMosaic(gray, width, height, corners, maxFrames) {
+    const adjustedCorners = expandDenseCorners(corners);
+    const map = makeHomography(adjustedCorners);
+    const header = readDenseHeader(gray, width, height, map);
+    const positions = getDensePositions(header.profile);
+    const globalThreshold = getThreshold(gray);
+    const frames = [];
+    const limit = Math.min(maxFrames, positions.length);
+
+    for (let index = 0; index < limit; index += 1) {
+      try {
+        const frame = sampleDenseTile(
+          gray,
+          width,
+          height,
+          map,
+          header,
+          positions[index],
+          (header.baseSequence + index) >>> 0,
+          globalThreshold
+        );
+        frame.corners = adjustedCorners;
+        frame.mosaicCorners = adjustedCorners;
+        frames.push(frame);
+      } catch {
+        // Damaged compact tiles are skipped.
+      }
+    }
+
+    if (!frames.length) throw new Error("Dense mosaic found but no clean tiles decoded");
+    return frames;
+  }
+
+  // Find and read an experimental dense mosaic
+  function sampleDenseMosaicFromImage(gray, width, height, hintCornerSets, maxFrames) {
+    let hints = hintCornerSets;
+    if (Array.isArray(hints) && hints.length === 4 && hints.every(point => point && Number.isFinite(point.x))) hints = [hints];
+
+    if (Array.isArray(hints)) {
+      for (const corners of hints.slice(0, 2)) {
+        if (!Array.isArray(corners) || corners.length !== 4) continue;
+        try {
+          return sampleDenseMosaic(gray, width, height, corners, maxFrames);
+        } catch {
+          // Search for fresh markers when the lock moved.
+        }
+      }
+    }
+
+    const threshold = getThreshold(gray);
+    const candidates = findMosaicMarkerCandidates(gray, width, height, threshold);
+    const corners = selectMosaicCorners(candidates, width, height);
+    return sampleDenseMosaic(gray, width, height, corners, maxFrames);
   }
 
   // Sample one tile from a locked mosaic
@@ -1346,6 +1823,12 @@
 
     if (maxFrames > 4) {
       try {
+        return sampleDenseMosaicFromImage(gray, canvas.width, canvas.height, hintCornerSets, maxFrames);
+      } catch {
+        // Try the stable 64-tile format next.
+      }
+
+      try {
         return sampleMosaicFromImage(gray, canvas.width, canvas.height, hintCornerSets, Math.min(maxFrames, MOSAIC_COUNT));
       } catch {
         // Legacy single-code search remains available as a fallback.
@@ -1402,12 +1885,15 @@
     return sampleFramesFromCanvas(canvas, hintCorners ? [hintCorners] : [], 1)[0];
   }
 
+
   window.JamScanCore = {
     DATA_GRID,
     CODE_GRID,
     MAX_PAYLOAD,
     MOSAIC_COUNT,
     MOSAIC_GRID,
+    DENSE_PROFILES,
+    DENSE_GRID,
     MAX_SOURCE_SIZE,
     FRAME_TYPE,
     textEncoder,
@@ -1422,6 +1908,7 @@
     mimeForName,
     concatArrays,
     crc32,
+    crc16,
     buildPackage,
     parsePackage,
     createStream,
@@ -1430,6 +1917,9 @@
     renderFrame,
     renderFrameGrid,
     renderMosaicGrid,
+    renderDenseMosaic,
+    renderTransfer,
+    getTransferProfile,
     sampleFrameFromCanvas,
     sampleFramesFromCanvas
   };

@@ -82,7 +82,7 @@
     }
 
     if (!state.session) {
-      element("scanMessage").textContent = "Point the camera at the complete 64-tile JamScan mosaic.";
+      element("scanMessage").textContent = "Point the camera at the complete JamScan mosaic. The scanner automatically detects stable and experimental density modes.";
     } else if (getMissingCount()) {
       element("scanMessage").textContent = `Receiving stream ${state.session.streamId.toString(16).padStart(8, "0")}. Repair frames can replace missed flashes.`;
     } else {
@@ -216,7 +216,7 @@
 
     if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false;
 
-    const maximumSide = 1280;
+    const maximumSide = 2560;
     const scale = Math.min(1, maximumSide / Math.max(video.videoWidth, video.videoHeight));
     const width = Math.max(1, Math.round(video.videoWidth * scale));
     const height = Math.max(1, Math.round(video.videoHeight * scale));
@@ -267,7 +267,7 @@
     try {
       if (drawCameraImage()) {
         const started = performance.now();
-        const frames = core.sampleFramesFromCanvas(element("sampleCanvas"), state.lockCorners, 64);
+        const frames = core.sampleFramesFromCanvas(element("sampleCanvas"), state.lockCorners, 5000);
         state.lastDecodeMs = performance.now() - started;
         state.lockCorners = frames[0]?.mosaicCorners
           ? [frames[0].mosaicCorners]
@@ -283,9 +283,10 @@
         }
 
         if (!state.complete) {
+          const density = frames[0]?.densityMode || (frames.length > 4 ? 64 : 1);
           element("scanBadge").textContent = added
-            ? `${added} new codes received from this mosaic`
-            : "Mosaic locked - waiting for new codes";
+            ? `${added} new codes received from ${density}-tile mode`
+            : `${density}-tile mosaic locked - waiting for new codes`;
           updateScanUI();
         }
       }
@@ -370,8 +371,8 @@
       return navigator.mediaDevices.getUserMedia({
         video: {
           deviceId: { exact: deviceId },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 3840 },
+          height: { ideal: 2160 },
           frameRate: { ideal: 60, min: 24 }
         },
         audio: false
@@ -380,8 +381,8 @@
 
     const base = {
       facingMode: { ideal: "environment" },
-      width: { ideal: 1280 },
-      height: { ideal: 720 }
+      width: { ideal: 3840 },
+      height: { ideal: 2160 }
     };
 
     const attempts = [
@@ -483,7 +484,7 @@
   async function readFrameImage(file) {
     const bitmap = await createImageBitmap(file);
     const canvas = element("sampleCanvas");
-    const maximumSide = 1280;
+    const maximumSide = 2560;
     const scale = Math.min(1, maximumSide / Math.max(bitmap.width, bitmap.height));
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
@@ -492,7 +493,7 @@
     bitmap.close();
 
     const started = performance.now();
-    const frames = core.sampleFramesFromCanvas(canvas, state.lockCorners, 64);
+    const frames = core.sampleFramesFromCanvas(canvas, state.lockCorners, 5000);
     state.lastDecodeMs = performance.now() - started;
     state.lockCorners = frames[0]?.mosaicCorners
       ? [frames[0].mosaicCorners]

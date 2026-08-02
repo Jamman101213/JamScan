@@ -17,7 +17,7 @@ Before submitting a change:
 
 1. Open the Home page.
 2. Build a text package on the Make page.
-3. Test the 64-tile mosaic and the legacy one-code fallback.
+3. Test the stable 64-tile mosaic, both experimental dense mosaics, and the legacy one-code fallback.
 4. Test the Scan page with a real phone camera.
 5. Open a saved `.jscan` file.
 6. Run:

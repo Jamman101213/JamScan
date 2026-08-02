@@ -165,6 +165,30 @@ function createTestStream(packageBytes, streamId) {
   }
   console.log(`PASS low-resolution mobile-style capture decoded=${lowResolutionFrames.length}`);
 
+  for (const mode of [1024, 4028]) {
+    const profile = core.getTransferProfile(mode);
+    const denseStream = core.createStream(built.bytes, profile.blockSize);
+    const denseSource = new TestCanvas(profile.canvasSize, profile.canvasSize);
+    core.renderTransfer(denseSource, denseStream, 500, mode);
+
+    const maximum = Math.floor(profile.canvasSize * 0.98);
+    const moduleSize = Math.max(1, Math.floor(maximum / core.DENSE_GRID));
+    const codeSide = moduleSize * core.DENSE_GRID;
+    const codeLeft = Math.floor((profile.canvasSize - codeSide) / 2);
+    const denseCorners = [[
+      { x: codeLeft, y: codeLeft },
+      { x: codeLeft + codeSide - 1, y: codeLeft },
+      { x: codeLeft + codeSide - 1, y: codeLeft + codeSide - 1 },
+      { x: codeLeft, y: codeLeft + codeSide - 1 }
+    ]];
+
+    const denseFrames = core.sampleFramesFromCanvas(denseSource, denseCorners, 5000);
+    if (denseFrames.length !== mode) {
+      throw new Error(`${mode} mode decoded ${denseFrames.length} tiles instead of ${mode}`);
+    }
+    console.log(`PASS ${mode}-tile experimental mosaic decoded=${denseFrames.length}`);
+  }
+
   const largePayload = new Uint8Array(100000);
   for (let index = 0; index < largePayload.length; index += 1) largePayload[index] = (index * 37 + 19) & 255;
   const largeBuilt = await core.buildPackage(largePayload, "large-test.bin", "application/octet-stream");

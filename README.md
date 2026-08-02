@@ -6,14 +6,15 @@ JamScan runs locally in the browser. It does not require an account, upload serv
 
 ## Main features
 
-- A seamless 8 by 8 mosaic containing 64 independently useful repair tiles
+- A stable seamless 8 by 8 mosaic containing 64 independently useful repair tiles
+- Experimental seamless 1024-tile and 4028-tile high-density modes
 - No internal divider lines between tiles
 - Four strong corner markers used to find the complete mosaic
 - Rateless repair frames that recover from missed camera images
 - Mid-stream joining with no required first frame
 - Rotation, mirroring, and perspective correction
 - `.jscan` save and open support
-- SHA-256 package verification and CRC-32 tile checks
+- SHA-256 package verification with CRC-32 and CRC-16 optical checks
 - Mobile, desktop, tablet, and supported VR layouts
 - A warning before recovered content is shown
 
@@ -27,7 +28,7 @@ JamScan runs locally in the browser. It does not require an account, upload serv
 ## Project structure
 
 ```text
-JamScan_Open_Source_64_Mosaic/
+JamScan_Open_Source_Experimental_Dense/
   index.html
   make/index.html
   scan/index.html
@@ -82,9 +83,23 @@ npx serve .
 
 JamScan automatically selects mobile or desktop layout. Supported VR browsers use desktop layout. Unsupported televisions, consoles, casting devices, bots, and unknown platforms show `JSCAN-DEVICE-001`. Browsers missing required APIs show `JSCAN-CAPABILITY-002`.
 
-The 64-tile mosaic is the default on phones, tablets, computers, and supported VR headsets.
+The stable 64-tile mosaic is the default on phones, tablets, computers, and supported VR headsets. The 1024-tile and 4028-tile modes must be selected manually because they need more screen and camera resolution.
 
-## How the 64-tile mosaic works
+
+## Experimental high-density modes
+
+JamScan includes two optional dense formats for larger photos, audio, and video files:
+
+- **1024 experimental** uses a 32 by 32 data grid, 15 by 15 cells per compact tile, and 24-byte fountain blocks. One clean mosaic can carry up to 24 KB of repair payload.
+- **4028 experimental** uses a 64 by 63 data grid with four corner positions reserved, 9 by 9 cells per compact tile, and 8-byte fountain blocks. One clean mosaic can carry up to 31.5 KB of repair payload.
+
+The compact modes use one shared stream header repeated on all four outside edges. Individual tiles only store a fountain payload and CRC-16. This avoids repeating the normal 36-byte header thousands of times.
+
+These modes are experimental. Use full screen, maximum brightness, a high-resolution sender display, the rear camera, close focus, and steady devices. The 4028 mode is most useful with a 4K or higher sender. On lower-resolution screens or cameras, only part of each mosaic may decode.
+
+The scanner accepts every clean tile it can read. A partially decoded dense mosaic still helps the fountain decoder, and later mosaics provide different repair data.
+
+## How the stable 64-tile mosaic works
 
 Each display update contains an 8 by 8 group of data tiles. The tiles touch directly, so there are no white or black divider lines between them. Four separate corner markers surround the tile area and let the scanner find the full square once.
 
@@ -94,7 +109,7 @@ Every tile contains its own sequence number, stream metadata, CRC-protected head
 
 ## Speed and reliability
 
-The default setting displays 64 repair tiles per mosaic at 10 mosaics per second. This targets up to 640 useful repair codes per second before camera losses.
+The default setting displays 64 repair tiles per mosaic at 10 mosaics per second. This targets up to 640 useful repair codes per second before camera losses. The experimental selectors raise the theoretical payload rate by using many compact tiles with a shared header.
 
 Ten mosaics per second is intentionally slower than the old flashing mode. Phone cameras need enough exposure time to capture one complete mosaic without mixing two display updates. The larger number of tiles makes the total transfer faster even with the slower visual update rate.
 
@@ -107,7 +122,7 @@ For best results:
 - Hold both devices still until the scanner locks.
 - Use the 8 mosaics per second setting in difficult lighting.
 
-At very low camera resolution, only some of the 64 tiles may decode. This is expected and does not stop the transfer. Later mosaics provide additional repair tiles.
+At low camera resolution, only part of a stable or experimental mosaic may decode. This is expected and does not stop the transfer. Later mosaics provide additional repair tiles.
 
 ## Repair stream
 
@@ -126,8 +141,8 @@ The warning is not a guarantee that a file is safe. JamScan checks integrity, no
 ## Integrity checks
 
 - Every package stores a SHA-256 hash of its original payload.
-- Every tile stores a CRC-32 value for its repair payload.
-- Every tile includes a CRC-32-protected header.
+- Stable tiles store CRC-32 values for their repair payload and full header.
+- Compact experimental tiles use CRC-16, while their repeated shared stream header uses CRC-32.
 - The complete `.jscan` package has a CRC-32 value in the optical stream.
 - Duplicate sequence numbers are ignored.
 - Recovered packages must pass length, CRC-32, and SHA-256 checks.
@@ -143,7 +158,9 @@ node tests/protocol-roundtrip.cjs
 The test checks:
 
 - Legacy single-code rotation handling
-- All 64 mosaic tiles at normal camera resolution
+- All 64 stable mosaic tiles at normal camera resolution
+- All 1024 compact experimental tiles in a generated mosaic
+- All 4028 compact experimental tiles in a generated mosaic
 - Rotated mosaic decoding
 - A fully white outside edge
 - Fountain recovery after 35 percent simulated code loss

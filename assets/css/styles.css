@@ -649,6 +649,12 @@ textarea {
   color: #8d2522;
   background: #f8e1df;
 }
+.status-box.warning {
+  border-color: #c69a28;
+  background: #fff3c9;
+  color: #5f4a16;
+}
+
 
 .notice-box {
   border-left: 4px solid var(--accent);

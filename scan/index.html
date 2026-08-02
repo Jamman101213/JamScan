@@ -36,7 +36,7 @@
     <section class="page-heading">
       <p class="kicker">Scan</p>
       <h1>Scan moving dots</h1>
-      <p>Point the camera at the complete JamScan mosaic. The scanner locks onto four corner markers, corrects rotation and perspective once, then reads up to 64 seamless data tiles from each camera image.</p>
+      <p>Point the camera at the complete JamScan mosaic. The scanner automatically detects the stable 64-tile mode and the experimental 1024-tile and 4028-tile modes.</p>
     </section>
 
     <section class="workspace-grid scan-grid">
@@ -87,14 +87,15 @@
 
         <div class="sub-panel">
           <h3>Test a frame image</h3>
-          <p>Select a screenshot of one JamScan mosaic. One image can contain as many as 64 repair codes.</p>
+          <p>Select a screenshot of one JamScan mosaic. Experimental images can contain as many as 4028 compact repair codes.</p>
           <input id="frameImageInput" type="file" accept="image/*" hidden>
           <button class="button" id="frameImageButton" type="button">Choose frame image</button>
         </div>
 
         <ul class="plain-list">
           <li>Any valid tile can identify and join the stream.</li>
-          <li>Up to 64 seamless tiles are decoded from each camera image.</li>
+          <li>Stable and experimental seamless mosaics are detected automatically.</li>
+          <li>High-density modes request a higher-resolution camera image and skip damaged tiles individually.</li>
           <li>The scanner can begin during any mosaic and does not need a special first frame.</li>
           <li>Repair codes replace information lost in missed flashes.</li>
           <li>Damaged codes fail the CRC check.</li>

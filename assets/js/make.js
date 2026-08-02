@@ -74,16 +74,49 @@
     return 1000 / delay;
   }
 
-  // Current frames
-  function currentFrames() {
-    if (!state.stream) return [];
+  // Selected transfer mode
+  function getTransferMode() {
+    return Number(element("codeCountSelect").value);
+  }
 
-    const count = getCodesPerFlash();
-    const frames = [];
-    for (let index = 0; index < count; index += 1) {
-      frames.push(core.createFountainFrame(state.stream, state.sequence + index));
+  // Block size for the selected density
+  function getSelectedBlockSize() {
+    const profile = core.getTransferProfile(getTransferMode());
+    return profile ? profile.blockSize : core.MAX_PAYLOAD;
+  }
+
+  // Rebuild the fountain stream when density changes
+  function rebuildStreamForMode() {
+    if (!state.packageBytes) return;
+    const blockSize = getSelectedBlockSize();
+    if (state.stream && state.stream.blockSize === blockSize) return;
+    state.stream = core.createStream(state.packageBytes, blockSize);
+    state.sequence = 0;
+  }
+
+  // Density advice
+  function updateDensityAdvice() {
+    const mode = getTransferMode();
+    const advice = element("densityAdvice");
+    if (!advice) return;
+
+    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+    const shortPixels = Math.round(Math.min(screen.width, screen.height) * pixelRatio);
+    const densePixelsPerModule = shortPixels / 640;
+    const screenText = `${shortPixels}px short side, about ${densePixelsPerModule.toFixed(1)} screen pixels per dense module`;
+
+    if (mode === 1024) {
+      const rating = densePixelsPerModule >= 2.5 ? "good experimental fit" : densePixelsPerModule >= 1.6 ? "borderline experimental fit" : "likely too low resolution";
+      advice.textContent = `Experimental 1024 mode sends 1024 compact repair tiles per mosaic. Sender check: ${screenText}; ${rating}. Use full screen and maximum brightness.`;
+      advice.className = "status-box warning";
+    } else if (mode === 4028) {
+      const rating = densePixelsPerModule >= 3 ? "good experimental fit" : densePixelsPerModule >= 1.8 ? "borderline experimental fit" : "likely too low resolution";
+      advice.textContent = `Experimental 4028 mode sends 4028 tiny repair tiles per mosaic. Sender check: ${screenText}; ${rating}. A 4K or higher sender and a high-resolution rear camera are strongly recommended.`;
+      advice.className = "status-box warning";
+    } else {
+      advice.textContent = "Stable 64 mode is the most reliable choice for ordinary phones, tablets, and computer screens.";
+      advice.className = "status-box";
     }
-    return frames;
   }
 
   // Stream metrics
@@ -117,7 +150,7 @@
   // Draw flash
   function showFlash() {
     if (!state.stream) return;
-    core.renderFrameGrid(element("streamCanvas"), currentFrames());
+    core.renderTransfer(element("streamCanvas"), state.stream, state.sequence, getTransferMode());
     updateMetrics();
   }
 
@@ -216,7 +249,7 @@
       const built = await core.buildPackage(payload, name, type);
       state.packageBytes = built.bytes;
       state.packageMeta = built.meta;
-      state.stream = core.createStream(built.bytes);
+      state.stream = core.createStream(built.bytes, getSelectedBlockSize());
       state.sequence = 0;
 
       element("streamEmpty").classList.add("hidden");
@@ -256,6 +289,8 @@
   // Update stream settings
   function streamSettingChanged() {
     state.measuredFps = 0;
+    rebuildStreamForMode();
+    updateDensityAdvice();
     if (state.stream) showFlash();
     updateMetrics();
   }
@@ -266,6 +301,7 @@
 
     // Default mosaic mode
     element("codeCountSelect").value = "64";
+    updateDensityAdvice();
 
     element("fileModeButton").addEventListener("click", () => setMode("file"));
     element("textModeButton").addEventListener("click", () => setMode("text"));

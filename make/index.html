@@ -94,7 +94,7 @@
         </div>
 
         <div class="canvas-shell" id="canvasShell">
-          <canvas id="streamCanvas" width="1080" height="1080" aria-label="JamScan animated 64-tile mosaic stream"></canvas>
+          <canvas id="streamCanvas" width="1080" height="1080" aria-label="JamScan animated optical mosaic stream"></canvas>
           <div class="canvas-empty" id="streamEmpty"><strong>No stream loaded</strong><span>Build a package to create frames.</span></div>
         </div>
 
@@ -115,6 +115,8 @@
             <select id="codeCountSelect">
               <option value="1">1 legacy code</option>
               <option value="64" selected>64-tile seamless mosaic</option>
+              <option value="1024">1024-tile experimental mosaic</option>
+              <option value="4028">4028-tile experimental mosaic</option>
             </select>
           </label>
         </div>
@@ -130,7 +132,8 @@
           <div class="metric"><span>Tiles per mosaic</span><strong id="metricCodes">-</strong></div>
         </div>
 
-        <div class="notice-box">Keep the complete white display visible, including all four small corner markers. The default mode merges 64 data tiles into one seamless mosaic with no internal divider lines. Use Full-screen display for the largest and clearest scan area.</div>
+        <div class="notice-box">Keep the complete white display visible, including all four corner markers. Every mosaic is seamless and has no internal divider lines. Use Full-screen display for the largest and clearest scan area.</div>
+        <div class="status-box" id="densityAdvice">Stable 64 mode is the most reliable choice for ordinary phones, tablets, and computer screens.</div>
       </article>
     </section>
   </main>

@@ -72,7 +72,7 @@
     setInterval(() => {
       frame += 1;
       drawMosaic(frame * 727 + 11);
-      frameLabel.textContent = `Flash ${String(frame).padStart(4, "0")} - 64 tiles`;
+      frameLabel.textContent = `Flash ${String(frame).padStart(4, "0")} - dense mosaic`;
     }, 75);
   }
 
