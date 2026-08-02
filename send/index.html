@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f1ea">
+  <title>Send - JamScan</title>
+  <link rel="stylesheet" href="../styles/main.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../">JamScan</a>
+    <nav class="nav">
+      <a href="../">Home</a>
+      <a class="active" href="./">Send</a>
+      <a href="../receive/">Receive</a>
+      <a href="../open/">Open .jscan</a>
+    </nav>
+  </header>
+  <main class="page">
+    <div class="layout">
+      <section class="card sender-controls">
+        <h1 style="font-size:clamp(2.4rem,6vw,4.6rem)">Send</h1>
+        <p class="muted">Choose content, select a realistic QR profile, and keep the entire white quiet zone visible.</p>
+        <div class="segmented">
+          <button id="mode-file" class="active" type="button">File</button>
+          <button id="mode-text" type="button">Text</button>
+        </div>
+        <div id="file-pane">
+          <div class="field">
+            <label for="file-input">File, up to 64 MB</label>
+            <input id="file-input" type="file">
+          </div>
+        </div>
+        <div id="text-pane" hidden>
+          <div class="field">
+            <label for="text-title">Text title</label>
+            <input id="text-title" type="text" value="JamScan message" maxlength="120">
+          </div>
+          <div class="field">
+            <label for="text-input">Text</label>
+            <textarea id="text-input" placeholder="Type or paste text here"></textarea>
+          </div>
+          <button id="text-build" class="button" type="button">Prepare text</button>
+        </div>
+        <div class="field">
+          <label>Transfer profile</label>
+          <div class="profile-grid">
+            <button class="profile-button active" data-profile="reliable" type="button">Reliable<small>1465 bytes per QR, 20 FPS</small></button>
+            <button class="profile-button" data-profile="fast" type="button">Fast<small>2953 bytes per QR, 24 FPS</small></button>
+            <button class="profile-button" data-profile="turbo" type="button">Turbo<small>2953 bytes per QR, 30 FPS</small></button>
+          </div>
+        </div>
+        <div class="button-row">
+          <button id="start-stream" class="button primary" type="button" disabled>Start stream</button>
+          <button id="save-jscan" class="button" type="button" disabled>Save .jscan</button>
+        </div>
+        <div id="send-status" class="status">Choose a file or prepare text.</div>
+        <div class="warning">Two-second transfers are only possible for small files. The estimate updates after the content is prepared.</div>
+      </section>
+
+      <section class="card stream-card">
+        <h2>Animated QR stream</h2>
+        <p class="muted">Each QR is complete by itself. The receiver may begin in the middle.</p>
+        <div class="qr-stage">
+          <canvas id="qr-canvas" width="900" height="900"></canvas>
+        </div>
+        <div class="button-row">
+          <button id="pause-stream" class="button dark" type="button" disabled>Pause</button>
+          <button id="fullscreen-stream" class="button" type="button" disabled>Full screen</button>
+          <button id="stop-stream" class="button danger" type="button" disabled>Stop</button>
+        </div>
+        <div class="stream-details">
+          <div class="metric"><span>Sequence</span><strong id="send-sequence">-</strong></div>
+          <div class="metric"><span>Package</span><strong id="send-size">-</strong></div>
+          <div class="metric"><span>Best case</span><strong id="send-time">-</strong></div>
+          <div class="metric"><span>Source blocks</span><strong id="send-blocks">-</strong></div>
+          <div class="metric"><span>QR payload</span><strong id="send-frame-size">-</strong></div>
+          <div class="metric"><span>Rate target</span><strong id="send-rate">-</strong></div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer>Use a white full-screen sender view. Do not crop the QR quiet zone.</footer>
+  <script type="module" src="../src/send.js"></script>
+</body>
+</html>

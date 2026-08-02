@@ -1,6 +1,3 @@
-Decimen Optical Transfer
-Source: https://github.com/bashalarmistalt/decimen-optical-transfer/
-
 MIT License
 
 Copyright (c) 2026 BashAlarmist

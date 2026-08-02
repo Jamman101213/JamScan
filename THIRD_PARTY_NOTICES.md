@@ -2,24 +2,24 @@
 
 ## Decimen Optical Transfer
 
-JamScan's multi-code optical mode is inspired by Decimen Optical Transfer by BashAlarmist. The LT fountain encoder and peeling decoder in `assets/js/fountain.js` contain adapted MIT-licensed logic from Decimen.
+JamScan 2.0 adapts the fountain-code design, self-describing frame protocol,
+60 FPS camera negotiation strategy, worker-based ZXing decoder pipeline, and
+animated QR tuning described and implemented by Decimen Optical Transfer.
 
-Source:
+Project: https://github.com/bashalarmistalt/decimen-optical-transfer/
+Creator: BashAlarmist
+License: MIT
 
-https://github.com/bashalarmistalt/decimen-optical-transfer/
+The complete Decimen MIT license is included at `licenses/DECIMEN-MIT.txt`.
 
-License:
+## node-qrcode
 
-MIT License, Copyright (c) 2026 BashAlarmist
+Used to generate standards-compliant QR codes.
+Project: https://github.com/soldair/node-qrcode
+License: MIT
 
-The complete notice is preserved in:
+## zxing-wasm
 
-```text
-licenses/DECIMEN-MIT.txt
-```
-
-JamScan does not claim endorsement by or affiliation with BashAlarmist or the Decimen project.
-
-## Browser runtime
-
-JamScan does not load a third-party JavaScript package, font, image, audio file, or video file at runtime. It uses browser APIs and project files included in this repository.
+Used to decode QR codes with ZXing-C++ compiled to WebAssembly.
+Project: https://github.com/Sec-ant/zxing-wasm
+License: MIT

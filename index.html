@@ -1,110 +1,34 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f1ea">
-  <meta name="description" content="JamScan turns files and text into animated dot streams or portable .jscan files.">
   <title>JamScan</title>
-  <link rel="stylesheet" href="assets/css/styles.css">
-  <script src="assets/js/device.js" defer></script>
-  <script src="assets/js/common.js" defer></script>
-  <script src="assets/js/home.js" defer></script>
+  <link rel="stylesheet" href="./styles/main.css">
 </head>
-<body data-page="home">
-  <!-- Main navigation -->
+<body>
   <header class="site-header">
-    <a class="brand" href="./" aria-label="JamScan home">
-      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-      <span><strong>JamScan</strong><small>Animated dot sharing</small></span>
-    </a>
-    <button class="menu-button" id="menuButton" type="button" aria-expanded="false" aria-controls="siteNav">Menu</button>
-    <nav class="site-nav" id="siteNav" aria-label="Main navigation">
+    <a class="brand" href="./">JamScan</a>
+    <nav class="nav">
       <a class="active" href="./">Home</a>
-      <a href="make/">Make</a>
-      <a href="scan/">Scan</a>
-      <a href="open/">Open</a>
+      <a href="./send/">Send</a>
+      <a href="./receive/">Receive</a>
+      <a href="./open/">Open .jscan</a>
     </nav>
-    <div class="device-label" data-device-label>Checking device</div>
   </header>
-
-  <main>
-    <!-- Start section -->
-    <section class="hero section-wrap">
-      <div class="hero-copy">
-        <p class="kicker">Open source local sharing</p>
-        <h1>Files become moving dots.</h1>
-        <p class="hero-text">Create a fast multi-code JamScan stream, scan it from another device, or share the same content as a portable .jscan file.</p>
-        <div class="hero-actions">
-          <a class="button primary large" href="make/">Start making</a>
-          <a class="button large" href="scan/">Start scanning</a>
-        </div>
-        <div class="hero-tags" aria-label="Project features">
-          <span>No account</span>
-          <span>No upload server</span>
-          <span>64 to 4028 tiles</span>
-          <span>Repair recovery</span>
-          <span>SHA-256 checks</span>
-          <span>Warning before preview</span>
-        </div>
-      </div>
-      <div class="demo-panel">
-        <div class="demo-head"><span>Live sample</span><span id="demoFrame">Frame 0001</span></div>
-        <canvas id="demoCanvas" width="560" height="560" aria-label="Animated JamScan sample"></canvas>
-      </div>
-    </section>
-
-    <!-- Start choices -->
-    <section class="section-wrap start-section">
-      <div class="section-heading">
-        <p class="kicker">Choose a page</p>
-        <h2>What do you want to do?</h2>
-      </div>
+  <main class="page">
+    <section class="hero">
+      <div class="eyebrow">Screen to camera file transfer</div>
+      <h1>Move files with light.</h1>
+      <p class="lead">JamScan turns a file into an endless stream of standard QR codes. A second device can start scanning at any point and recover the file without a network connection between the devices.</p>
       <div class="action-grid">
-        <a class="action-card" href="make/">
-          <span class="action-number">01</span>
-          <h3>Make a JamScan</h3>
-          <p>Package text, photos, GIFs, audio, video, or another file. Save it or show it as animated dots.</p>
-          <span class="text-link">Open make page</span>
-        </a>
-        <a class="action-card" href="scan/">
-          <span class="action-number">02</span>
-          <h3>Scan moving dots</h3>
-          <p>Use a camera to read stable or experimental repair mosaics and rebuild the original package even when many tiles are missed.</p>
-          <span class="text-link">Open scan page</span>
-        </a>
-        <a class="action-card" href="open/">
-          <span class="action-number">03</span>
-          <h3>Open a .jscan file</h3>
-          <p>Verify a saved package, read its type, and review the safety warning before showing anything.</p>
-          <span class="text-link">Open file page</span>
-        </a>
+        <a class="action-card" href="./send/"><strong>Send</strong><span>Choose a file or text and display the animated QR stream.</span></a>
+        <a class="action-card" href="./receive/"><strong>Receive</strong><span>Use a phone camera and rebuild the file from valid QR frames.</span></a>
+        <a class="action-card" href="./open/"><strong>Open .jscan</strong><span>Verify and preview a saved JamScan package.</span></a>
       </div>
-    </section>
-
-    <!-- Safety section -->
-    <section class="section-wrap info-grid">
-      <article class="info-card">
-        <h3>Warning first</h3>
-        <p>Recovered content is labeled before preview. The warning covers unsafe files, scams, misleading links, and inappropriate content.</p>
-      </article>
-      <article class="info-card">
-        <h3>Local processing</h3>
-        <p>JamScan does not need an account or upload service. Packaging, scanning, and verification happen in the browser.</p>
-      </article>
-      <article class="info-card">
-        <h3>Device layouts</h3>
-        <p>Phones and tablets use mobile mode. Desktop and supported VR browsers use desktop mode. Unsupported devices show an error code.</p>
-      </article>
     </section>
   </main>
-
-  <!-- Page footer -->
-  <footer class="site-footer section-wrap">
-    <span>JamScan open source project</span>
-    <span><a href="README.md">README</a>, <a href="CREDITS.md">Credits</a>, and <a href="LICENSE">MIT License</a></span>
-  </footer>
-
-  <div class="toast" id="toast" role="status"></div>
+  <footer>JamScan 2.0. Open source under MIT. Optical engine adapted from Decimen Optical Transfer under MIT.</footer>
 </body>
 </html>

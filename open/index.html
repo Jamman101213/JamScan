@@ -1,90 +1,35 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f4f1ea">
-  <meta name="description" content="Open and verify portable JamScan files.">
-  <title>Open - JamScan</title>
-  <link rel="stylesheet" href="../assets/css/styles.css">
-  <script src="../assets/js/device.js" defer></script>
-  <script src="../assets/js/fountain.js" defer></script>
-  <script src="../assets/js/core.js" defer></script>
-  <script src="../assets/js/common.js" defer></script>
-  <script src="../assets/js/viewer.js" defer></script>
-  <script src="../assets/js/open.js" defer></script>
+  <title>Open .jscan - JamScan</title>
+  <link rel="stylesheet" href="../styles/main.css">
 </head>
-<body data-page="open">
-  <!-- Main navigation -->
+<body>
   <header class="site-header">
-    <a class="brand" href="../" aria-label="JamScan home">
-      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-      <span><strong>JamScan</strong><small>Animated dot sharing</small></span>
-    </a>
-    <button class="menu-button" id="menuButton" type="button" aria-expanded="false" aria-controls="siteNav">Menu</button>
-    <nav class="site-nav" id="siteNav" aria-label="Main navigation">
+    <a class="brand" href="../">JamScan</a>
+    <nav class="nav">
       <a href="../">Home</a>
-      <a href="../make/">Make</a>
-      <a href="../scan/">Scan</a>
-      <a class="active" href="./">Open</a>
+      <a href="../send/">Send</a>
+      <a href="../receive/">Receive</a>
+      <a class="active" href="./">Open .jscan</a>
     </nav>
-    <div class="device-label" data-device-label>Checking device</div>
   </header>
-
-  <main class="section-wrap page-main narrow-main">
-    <!-- Page heading -->
-    <section class="page-heading">
-      <p class="kicker">Open</p>
-      <h1>Open a .jscan file</h1>
-      <p>JamScan verifies the package, identifies the content type, and displays a warning before anything is shown.</p>
-    </section>
-
-    <!-- File opener -->
-    <section class="panel-card">
-      <input id="jscanInput" type="file" accept=".jscan,application/x-jamscan" hidden>
-      <div class="drop-zone large-drop" id="jscanDrop" tabindex="0" role="button">
-        <strong>Drop a .jscan file here</strong>
-        <span>or select a file</span>
+  <main class="page">
+    <section class="card camera-card">
+      <h1 style="font-size:clamp(2.4rem,7vw,5rem)">Open .jscan</h1>
+      <p class="muted">Verify a saved JamScan package before viewing or downloading its content.</p>
+      <div class="field">
+        <label for="jscan-input">JamScan file</label>
+        <input id="jscan-input" type="file" accept=".jscan,application/x-jamscan">
       </div>
-      <div class="status-box" id="openStatus">No .jscan file selected.</div>
+      <div id="open-status" class="status">No package selected.</div>
+      <div id="open-result" class="preview"></div>
     </section>
-
-    <!-- Opened preview -->
-    <section id="openPreviewHost"></section>
   </main>
-
-  <!-- Safety warning -->
-  <dialog class="warning-dialog" id="warningDialog">
-    <div class="dialog-heading">
-      <div class="warning-symbol">!</div>
-      <div><h2>Check before opening</h2><p id="warningSubtitle">JamScan content may be unsafe or inappropriate.</p></div>
-    </div>
-    <div class="dialog-body">
-      <div class="content-summary">
-        <div><span>Content type</span><strong id="warningKind">Unknown</strong></div>
-        <div><span>File name</span><strong id="warningName">-</strong></div>
-        <div><span>Size</span><strong id="warningSize">-</strong></div>
-        <div><span>Integrity</span><strong id="warningIntegrity">-</strong></div>
-      </div>
-      <div class="warning-list">
-        <p>It could contain inappropriate or disturbing content, even when the file name looks harmless.</p>
-        <p>Text or media could contain scams, fake offers, deceptive links, or impersonation.</p>
-        <p>Unknown downloads could be malware or unsafe files. Do not run anything you do not trust.</p>
-      </div>
-      <label class="check-row"><input id="warningCheck" type="checkbox"><span>I understand that JamScan does not verify, moderate, or guarantee the safety of this content.</span></label>
-    </div>
-    <div class="dialog-actions">
-      <button class="button" id="warningCancel" type="button">Cancel</button>
-      <button class="button primary" id="warningOpen" type="button" disabled>Continue safely</button>
-    </div>
-  </dialog>
-
-  <!-- Page footer -->
-  <footer class="site-footer section-wrap">
-    <span>JamScan open source project</span>
-    <span><a href="../README.md">README</a>, <a href="../CREDITS.md">Credits</a>, and <a href="../LICENSE">MIT License</a></span>
-  </footer>
-
-  <div class="toast" id="toast" role="status"></div>
+  <footer>Unknown file types are never executed inside JamScan.</footer>
+  <script type="module" src="../src/open.js"></script>
 </body>
 </html>
