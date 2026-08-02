@@ -2,9 +2,12 @@
 
 // Browser globals
 global.window = global;
+if (!global.crypto) global.crypto = require("node:crypto").webcrypto;
+require("../assets/js/fountain.js");
 require("../assets/js/core.js");
 
 const core = global.JamScanCore;
+const fountain = global.JamScanFountain;
 
 // Test canvas
 class TestCanvas {
@@ -30,7 +33,7 @@ class TestContext {
   }
 
   fillRect(x, y, width, height) {
-    const value = this.fillStyle === "#111111" ? 17 : 255;
+    const value = this.fillStyle === "#111111" ? 17 : this.fillStyle === "#e9e7e1" ? 233 : 255;
     const startX = Math.max(0, Math.floor(x));
     const startY = Math.max(0, Math.floor(y));
     const endX = Math.min(this.canvas.width, Math.ceil(x + width));
@@ -59,7 +62,7 @@ class TestContext {
   }
 }
 
-// Paste frame
+// Paste image
 function pasteRotated(source, target, centerX, centerY, size, angleDegrees) {
   const radians = angleDegrees * Math.PI / 180;
   const cosine = Math.cos(-radians);
@@ -80,44 +83,97 @@ function pasteRotated(source, target, centerX, centerY, size, angleDegrees) {
   }
 }
 
-// Test frame
-function testFrame(frame, angle) {
-  const source = new TestCanvas(720, 720);
-  core.renderFrame(source, frame);
+// Compare bytes
+function equalBytes(left, right) {
+  if (!left || left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
 
-  const camera = new TestCanvas(480, 360, 216);
-  pasteRotated(source, camera, 240, 180, 288, angle);
 
-  const decoded = core.sampleFrameFromCanvas(camera);
-  if (decoded.streamId !== frame.streamId) throw new Error(`Stream ID mismatch at ${angle} degrees`);
-  if (decoded.sequence !== frame.sequence) throw new Error(`Sequence mismatch at ${angle} degrees`);
-  if (decoded.type !== frame.type) throw new Error(`Frame type mismatch at ${angle} degrees`);
+// Fixed test stream
+function createTestStream(packageBytes, streamId) {
+  const blockSize = 320;
+  const encoder = new fountain.Encoder(packageBytes, blockSize, streamId);
+
+  return {
+    streamId: streamId >>> 0,
+    total: encoder.blockCount,
+    blockSize,
+    packageLength: packageBytes.length,
+    packageCRC: core.crc32(packageBytes),
+    encoder
+  };
 }
 
 // Run tests
 (async () => {
-  const payload = core.textEncoder.encode("JamScan protocol test ".repeat(40));
+  const payload = core.textEncoder.encode("JamScan protocol test ".repeat(80));
   const built = await core.buildPackage(payload, "test.txt", "text/plain");
-  const stream = core.createStream(built.bytes);
-  const frames = core.createCycleFrames(stream, 0, {
-    startRepeats: 4,
-    endRepeats: 2,
-    dataRepeats: 1
-  });
-  const selected = [frames[0], frames.find(frame => frame.type === core.FRAME_TYPE.DATA)];
+  const stream = createTestStream(built.bytes, 0x5a17c0de);
 
-  for (const frame of selected) {
-    for (const angle of [0, 5, -7, 90]) {
-      testFrame(frame, angle);
-      console.log(`PASS type=${frame.type} angle=${angle}`);
+  for (const angle of [0, 5, -7, 90]) {
+    const frame = core.createFountainFrame(stream, 7);
+    const source = new TestCanvas(720, 720);
+    core.renderFrame(source, frame);
+    const camera = new TestCanvas(480, 360, 216);
+    pasteRotated(source, camera, 240, 180, 288, angle);
+    const decoded = core.sampleFrameFromCanvas(camera);
+    if (decoded.streamId !== frame.streamId || decoded.sequence !== frame.sequence) {
+      throw new Error(`Single-code mismatch at ${angle} degrees`);
     }
+    console.log(`PASS single angle=${angle}`);
   }
 
-  const parsed = await core.parsePackage(built.bytes);
-  if (!parsed.hashOK) throw new Error("Package hash failed");
-  if (core.textDecoder.decode(parsed.payload) !== core.textDecoder.decode(payload)) {
-    throw new Error("Package payload mismatch");
+  const multiFrames = [0, 1, 2, 3].map(sequence => core.createFountainFrame(stream, sequence));
+  const multiSource = new TestCanvas(960, 960);
+  core.renderFrameGrid(multiSource, multiFrames);
+
+  for (const angle of [0, 3, -3]) {
+    const multiCamera = new TestCanvas(640, 480, 216);
+    pasteRotated(multiSource, multiCamera, 320, 240, 430, angle);
+    const decodedFrames = core.sampleFramesFromCanvas(multiCamera, [], 4);
+    const decodedSequences = new Set(decodedFrames.map(frame => frame.sequence));
+    if (angle === 0) {
+      for (const frame of multiFrames) {
+        if (!decodedSequences.has(frame.sequence)) throw new Error(`Multi-code frame ${frame.sequence} was not decoded`);
+      }
+    } else if (decodedSequences.size < 1) {
+      throw new Error(`Too few multi-code frames decoded at ${angle} degrees`);
+    }
+    console.log(`PASS multi-code flash angle=${angle} decoded=${decodedSequences.size}`);
   }
+
+  const largePayload = new Uint8Array(100000);
+  for (let index = 0; index < largePayload.length; index += 1) largePayload[index] = (index * 37 + 19) & 255;
+  const largeBuilt = await core.buildPackage(largePayload, "large-test.bin", "application/octet-stream");
+  const largeStream = createTestStream(largeBuilt.bytes, 0x12345678);
+  const decoder = new fountain.Decoder(
+    largeStream.total,
+    largeStream.blockSize,
+    largeStream.streamId,
+    largeStream.packageLength
+  );
+
+  let sequence = 0;
+  let received = 0;
+  while (!decoder.isComplete && sequence < largeStream.total * 10 + 1000) {
+    const frame = core.createFountainFrame(largeStream, sequence);
+    if (((sequence * 1103515245) >>> 0) % 100 >= 35) {
+      decoder.addFrame(frame.sequence, frame.payload);
+      received += 1;
+    }
+    sequence += 1;
+  }
+
+  const recovered = decoder.result();
+  if (!equalBytes(recovered, largeBuilt.bytes)) throw new Error("Fountain recovery failed after dropped frames");
+  console.log(`PASS fountain recovery for ${largeStream.total} blocks with 35 percent simulated loss: ${received} received from ${sequence} transmitted codes`);
+
+  const parsed = await core.parsePackage(recovered);
+  if (!parsed.hashOK || !equalBytes(parsed.payload, largePayload)) throw new Error("Package verification failed");
 
   console.log("ALL TESTS PASSED");
 })().catch(error => {

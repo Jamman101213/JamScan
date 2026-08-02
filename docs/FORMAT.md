@@ -3,7 +3,7 @@
 JamScan uses two related formats:
 
 - The `.jscan` package stores metadata and the original payload.
-- The visual frame protocol sends that package through animated dot frames.
+- The visual protocol sends that package through changing dot codes.
 
 ## `.jscan` package
 
@@ -33,9 +33,21 @@ The metadata contains:
 - `created`
 - `sha256`
 
+## Visual flash
+
+A visual flash can contain:
+
+- 1 code
+- 2 codes
+- 4 codes
+
+Every code is independent. A camera image can therefore add several useful repair frames at once.
+
+Four-code mode uses a two-by-two layout. Two-code mode uses two columns. White space separates the locator borders so the scanner can find each code as a separate connected shape.
+
 ## Visual grid
 
-Protocol version 3 uses a 72 by 72 displayed grid:
+Protocol version 4 uses a 72 by 72 displayed grid for each code:
 
 ```text
 4 cells   White quiet zone
@@ -49,73 +61,82 @@ Protocol version 3 uses a 72 by 72 displayed grid:
 
 The four 8 by 8 corners of the 56 by 56 data grid are reserved for finder markers. The remaining cells store the frame header and payload bits.
 
-The black locator border is separated from the data by white cells. This lets the scanner find the square as a connected shape, estimate its four corners, and correct rotation and perspective before reading data.
+The locator border is separated from the data by white cells. This lets the scanner find the square, estimate its corners, and correct rotation and perspective.
 
-## Visual header version 3
+## Visual header version 4
 
-```text
-Byte 0      Magic A5
-Byte 1      Magic 5A
-Byte 2      Protocol version 03
-Byte 3      Frame type
-Bytes 4-6   Data index, little endian
-Bytes 7-9   Total data frame count, little endian
-Bytes 10-11 Payload length, little endian
-Bytes 12-15 Stream ID, little endian
-Bytes 16-19 Cycle number, little endian
-Bytes 20-23 Sequence number, little endian
-Bytes 24-27 Payload CRC-32, little endian
-Bytes 28-31 Header CRC-32, little endian
-```
-
-Frame types:
+Every visual code carries a 36-byte header:
 
 ```text
-0 Start marker
-1 Data frame
-2 End marker
+Bytes 0-1    Magic A5 5A
+Byte 2       Protocol version 04
+Byte 3       Frame type 03
+Bytes 4-7    Sequence number, little endian
+Bytes 8-11   Source block count, little endian
+Bytes 12-13  Source block size, little endian
+Bytes 14-15  Reserved
+Bytes 16-19  Complete package length, little endian
+Bytes 20-23  Stream ID, little endian
+Bytes 24-27  Complete package CRC-32, little endian
+Bytes 28-31  Repair payload CRC-32, little endian
+Bytes 32-35  Header CRC-32, little endian
 ```
 
-Start and end markers carry a 12-byte marker payload:
+The payload is one 320-byte fountain block. The final source block is padded before fountain encoding. The package length in the header removes the padding after recovery.
 
-```text
-Bytes 0-3   Package length, little endian
-Bytes 4-7   Complete package CRC-32, little endian
-Bytes 8-9   Data block size, little endian
-Byte 10     Protocol version
-Byte 11     Flags
-```
+## Repair stream
 
-Data frames carry up to 320 package bytes.
+The visual protocol is continuous and does not have a required start marker or fixed ending.
 
-## Loop rules
+Every frame is self-describing. The first valid frame seen by the scanner creates or joins a session using:
 
-Each loop contains:
+- Stream ID
+- Source block count
+- Source block size
+- Complete package length
+- Complete package CRC-32
 
-1. A visible start-marker period
-2. Every data frame
-3. An end-marker period
+JamScan uses an LT fountain encoder with a robust-soliton degree distribution:
 
-The Make page calculates the marker repeat count from the selected frame rate. The start marker remains visible for about 0.7 seconds so a camera that begins in the middle can reliably lock onto the next loop.
+- Each sequence number deterministically selects a degree and a set of source blocks.
+- The transmitted repair payload is the XOR of those selected source blocks.
+- The same stream ID and sequence number always select the same source blocks.
+- The sender can continue producing new repair codes without a fixed ending.
 
-The scanner does not accept data until it reads a valid start marker. It stores data by its data index, so duplicate frames are ignored and later loops can fill missing indexes.
+The decoder removes already solved blocks from each XOR equation. When an equation has one unknown block left, that block is solved and applied to other pending equations. The fountain implementation in `assets/js/fountain.js` is adapted from Decimen Optical Transfer under its MIT License.
 
-Sequence gaps are counted as missed flashes. A cycle change without a start marker makes the scanner wait for the next valid start marker.
+The stream continues without a fixed frame count. This lets later frames repair information lost when the camera misses earlier display updates.
 
-Small streams repeat their data frames within the same cycle. This improves short transfers where missing one of only a few frames would otherwise force another full loop.
+JamScan wraps the adapted fountain logic in its own dot-grid frame and package protocol. The resulting visual stream is not wire-compatible with Decimen Optical Transfer.
+
+## Sequence gaps
+
+The scanner records gaps between observed sequence numbers. A gap means one or more displayed codes were not decoded.
+
+A sequence gap does not make the transfer fail. The receiver continues collecting direct and repair codes until all source blocks are solved.
+
+Duplicate sequence numbers are ignored.
 
 ## Scanner rules
 
 The scanner:
 
-1. Finds the separate black locator border.
-2. Estimates the four corners of the square.
-3. Corrects scale, rotation, and perspective.
-4. Samples the 56 by 56 data grid.
-5. Tries normal, rotated, and mirrored directions.
-6. Checks the finder pattern.
-7. Checks the header CRC-32.
-8. Checks the payload CRC-32.
-9. Applies the start, data, and end sequence rules.
+1. Reads one camera image.
+2. Tries recently locked code positions first.
+3. Searches the full image for additional locator borders.
+4. Finds up to four codes.
+5. Estimates the four corners of each code.
+6. Corrects scale, rotation, mirroring, and perspective.
+7. Samples each 56 by 56 data grid.
+8. Checks the finder patterns.
+9. Checks each header CRC-32.
+10. Checks each repair payload CRC-32.
+11. Adds every new sequence to the fountain decoder.
+12. Verifies the recovered package length and CRC-32.
+13. Verifies the original payload SHA-256 value.
 
-After a successful lock, the previous corner positions are tried first on the next camera frame. A full image search is only needed again when the lock is lost.
+After a successful lock, the previous corner positions are tried first on the next camera frame. A full search is still used to find other codes or recover from movement.
+
+## Content warning
+
+Package recovery does not immediately show the content. JamScan displays the claimed content type, file name, size, and integrity result before the user chooses whether to continue.

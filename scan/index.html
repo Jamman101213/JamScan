@@ -8,6 +8,7 @@
   <title>Scan - JamScan</title>
   <link rel="stylesheet" href="../assets/css/styles.css">
   <script src="../assets/js/device.js" defer></script>
+  <script src="../assets/js/fountain.js" defer></script>
   <script src="../assets/js/core.js" defer></script>
   <script src="../assets/js/common.js" defer></script>
   <script src="../assets/js/viewer.js" defer></script>
@@ -35,7 +36,7 @@
     <section class="page-heading">
       <p class="kicker">Scan</p>
       <h1>Scan moving dots</h1>
-      <p>Point the camera at a JamScan stream. You can begin in the middle; the scanner finds the square, corrects rotation and perspective, then waits for the next start marker.</p>
+      <p>Point the camera at a JamScan stream. You can begin anywhere. The scanner finds up to four codes at once, corrects rotation and perspective, and joins the current repair stream immediately.</p>
     </section>
 
     <section class="workspace-grid scan-grid">
@@ -43,7 +44,7 @@
       <article class="panel-card">
         <div class="panel-heading">
           <h2>Camera</h2>
-          <p>Keep the complete square visible. JamScan finds and straightens it automatically.</p>
+          <p>Keep the full multi-code area visible. JamScan finds and straightens each code automatically.</p>
         </div>
 
         <div class="camera-shell">
@@ -53,7 +54,7 @@
           <div class="scan-guide" aria-hidden="true"></div>
           <div class="scan-badge" id="scanBadge">Ready to scan</div>
         </div>
-        <canvas class="hidden" id="sampleCanvas" width="480" height="360"></canvas>
+        <canvas class="hidden" id="sampleCanvas" width="640" height="480"></canvas>
 
         <div class="button-row">
           <button class="button primary" id="cameraButton" type="button">Start camera</button>
@@ -72,17 +73,17 @@
         </div>
 
         <div class="progress-track"><div class="progress-bar" id="scanProgress"></div></div>
-        <div class="progress-text"><span id="scanPercent">0%</span><span id="scanFrameCount">0 / 0 frames</span></div>
+        <div class="progress-text"><span id="scanPercent">0%</span><span id="scanFrameCount">0 / 0 codes</span></div>
 
-        <div class="scan-state-row"><span>Scanner state</span><strong id="scanState">Waiting for start</strong></div>
+        <div class="scan-state-row"><span>Scanner state</span><strong id="scanState">Searching</strong></div>
 
         <div class="metric-grid scan-metrics">
-          <div class="metric"><span>Valid data</span><strong id="validFrames">0</strong></div>
+          <div class="metric"><span>Codes collected</span><strong id="validFrames">0</strong></div>
           <div class="metric"><span>Rejected</span><strong id="badFrames">0</strong></div>
           <div class="metric"><span>Missed flashes</span><strong id="missedFlashes">0</strong></div>
           <div class="metric"><span>Still missing</span><strong id="missingFrames">0</strong></div>
           <div class="metric"><span>Last decode</span><strong id="decodeTime">-</strong></div>
-          <div class="metric"><span>Cycles seen</span><strong id="cycleCount">0</strong></div>
+          <div class="metric"><span>Codes last view</span><strong id="cycleCount">0</strong></div>
           <div class="metric"><span>Camera rate</span><strong id="cameraRate">-</strong></div>
         </div>
 
@@ -94,10 +95,11 @@
         </div>
 
         <ul class="plain-list">
-          <li>Data seen before a start marker is ignored.</li>
-          <li>Sequence gaps are counted as missed flashes.</li>
-          <li>Missing data is collected during later loops.</li>
-          <li>Damaged frames fail the CRC check.</li>
+          <li>Any valid code can identify and join the stream.</li>
+          <li>Up to four codes are decoded from each camera image.</li>
+          <li>Sequence gaps are reported but do not stop recovery.</li>
+          <li>Repair codes replace information lost in missed flashes.</li>
+          <li>Damaged codes fail the CRC check.</li>
           <li>Recovered content stays hidden until the warning is accepted.</li>
         </ul>
       </article>
@@ -136,7 +138,7 @@
   <!-- Page footer -->
   <footer class="site-footer section-wrap">
     <span>JamScan open source project</span>
-    <span><a href="../README.md">README</a> and <a href="../LICENSE">MIT License</a></span>
+    <span><a href="../README.md">README</a>, <a href="../CREDITS.md">Credits</a>, and <a href="../LICENSE">MIT License</a></span>
   </footer>
 
   <div class="toast" id="toast" role="status"></div>

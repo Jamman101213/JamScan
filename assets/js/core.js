@@ -9,10 +9,10 @@
   const SEPARATOR = 2;
   const CODE_GRID = DATA_GRID + (QUIET + BORDER + SEPARATOR) * 2;
   const INNER_GRID = DATA_GRID + (BORDER + SEPARATOR) * 2;
-  const FRAME_HEADER_BYTES = 32;
+  const FRAME_HEADER_BYTES = 36;
   const MAX_PAYLOAD = 320;
   const MAX_SOURCE_SIZE = 256 * 1024 * 1024;
-  const FRAME_VERSION = 3;
+  const FRAME_VERSION = 4;
   const MAGIC = new Uint8Array([0x4a, 0x53, 0x43, 0x41, 0x4e, 0x01]);
   const textEncoder = new TextEncoder();
   const textDecoder = new TextDecoder();
@@ -21,7 +21,8 @@
   const FRAME_TYPE = Object.freeze({
     START: 0,
     DATA: 1,
-    END: 2
+    END: 2,
+    FOUNTAIN: 3
   });
 
   // Grid areas
@@ -128,6 +129,7 @@
     if (type === FRAME_TYPE.START) return "Start";
     if (type === FRAME_TYPE.DATA) return "Data";
     if (type === FRAME_TYPE.END) return "End";
+    if (type === FRAME_TYPE.FOUNTAIN) return "Repair";
     return "Unknown";
   }
 
@@ -308,88 +310,63 @@
 
   // Create stream
   function createStream(packageBytes) {
-    const total = Math.max(1, Math.ceil(packageBytes.length / MAX_PAYLOAD));
     const streamId = crypto.getRandomValues(new Uint32Array(1))[0];
-    const chunks = [];
-
-    for (let index = 0; index < total; index += 1) {
-      chunks.push(packageBytes.slice(index * MAX_PAYLOAD, (index + 1) * MAX_PAYLOAD));
-    }
+    const encoder = new window.JamScanFountain.Encoder(packageBytes, MAX_PAYLOAD, streamId);
 
     return {
       streamId,
-      total,
+      total: encoder.blockCount,
       blockSize: MAX_PAYLOAD,
       packageLength: packageBytes.length,
       packageCRC: crc32(packageBytes),
-      chunks
+      encoder
     };
   }
 
-  // Create frame
-  function createFrame(stream, type, index, cycle, sequence, payload) {
+  // Create fountain frame
+  function createFountainFrame(stream, sequence) {
+    const payload = stream.encoder.encode(sequence >>> 0);
     const header = new Uint8Array(FRAME_HEADER_BYTES);
 
     header[0] = 0xa5;
     header[1] = 0x5a;
     header[2] = FRAME_VERSION;
-    header[3] = type;
-    writeU24(header, 4, index);
-    writeU24(header, 7, stream.total);
-    header[10] = payload.length & 255;
-    header[11] = (payload.length >>> 8) & 255;
-    writeU32(header, 12, stream.streamId);
-    writeU32(header, 16, cycle);
-    writeU32(header, 20, sequence);
-    writeU32(header, 24, crc32(payload));
-    writeU32(header, 28, crc32(header.slice(0, 28)));
+    header[3] = FRAME_TYPE.FOUNTAIN;
+    writeU32(header, 4, sequence >>> 0);
+    writeU32(header, 8, stream.total >>> 0);
+    header[12] = stream.blockSize & 255;
+    header[13] = (stream.blockSize >>> 8) & 255;
+    header[14] = 0;
+    header[15] = 0;
+    writeU32(header, 16, stream.packageLength >>> 0);
+    writeU32(header, 20, stream.streamId >>> 0);
+    writeU32(header, 24, stream.packageCRC >>> 0);
+    writeU32(header, 28, crc32(payload));
+    writeU32(header, 32, crc32(header.slice(0, 32)));
 
     return {
       header,
       payload,
-      type,
-      index,
+      type: FRAME_TYPE.FOUNTAIN,
+      index: sequence >>> 0,
       total: stream.total,
       streamId: stream.streamId,
-      cycle,
-      sequence
+      cycle: 0,
+      sequence: sequence >>> 0,
+      packageLength: stream.packageLength,
+      packageCRC: stream.packageCRC,
+      blockSize: stream.blockSize
     };
   }
 
-  // Create loop frames
+  // Create test frames
   function createCycleFrames(stream, cycle, options = {}) {
+    const count = Math.max(1, Number(options.count) || stream.total);
+    const offset = Math.max(0, cycle) * count;
     const frames = [];
-    const markerPayload = new Uint8Array(12);
-    writeU32(markerPayload, 0, stream.packageLength);
-    writeU32(markerPayload, 4, stream.packageCRC);
-    markerPayload[8] = stream.blockSize & 255;
-    markerPayload[9] = (stream.blockSize >>> 8) & 255;
-    markerPayload[10] = FRAME_VERSION;
-    markerPayload[11] = 0;
 
-    const startRepeats = Math.max(4, Math.min(90, Number(options.startRepeats) || 12));
-    const endRepeats = Math.max(2, Math.min(30, Number(options.endRepeats) || 4));
-    const dataRepeats = Math.max(1, Math.min(3, Number(options.dataRepeats) || 1));
-    let sequence = 0;
-
-    for (let repeat = 0; repeat < startRepeats; repeat += 1) {
-      frames.push(createFrame(stream, FRAME_TYPE.START, 0, cycle, sequence, markerPayload));
-      sequence += 1;
-    }
-
-    for (let repeat = 0; repeat < dataRepeats; repeat += 1) {
-      const offset = stream.total ? (cycle * 13 + repeat * 7) % stream.total : 0;
-
-      for (let position = 0; position < stream.total; position += 1) {
-        const index = (offset + position) % stream.total;
-        frames.push(createFrame(stream, FRAME_TYPE.DATA, index, cycle, sequence, stream.chunks[index]));
-        sequence += 1;
-      }
-    }
-
-    for (let repeat = 0; repeat < endRepeats; repeat += 1) {
-      frames.push(createFrame(stream, FRAME_TYPE.END, stream.total, cycle, sequence, markerPayload));
-      sequence += 1;
+    for (let index = 0; index < count; index += 1) {
+      frames.push(createFountainFrame(stream, offset + index));
     }
 
     return frames;
@@ -434,21 +411,17 @@
     };
   }
 
-  // Draw frame
-  function renderFrame(canvas, frame) {
-    const context = canvas.getContext("2d", { alpha: false });
-    const width = canvas.width;
-    const height = canvas.height;
+  // Draw one code
+  function drawFrame(context, frame, left, top, width, height) {
     const moduleWidth = width / CODE_GRID;
     const moduleHeight = height / CODE_GRID;
     const packet = concatArrays([frame.header, frame.payload]);
     const bits = bytesToBits(packet);
-    const random = xorshift((frame.streamId ^ frame.index ^ frame.cycle ^ 0x9e3779b9) >>> 0);
+    const random = xorshift((frame.streamId ^ frame.sequence ^ 0x9e3779b9) >>> 0);
     let bitIndex = 0;
 
-    context.imageSmoothingEnabled = false;
     context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, width, height);
+    context.fillRect(left, top, width, height);
 
     for (let y = 0; y < CODE_GRID; y += 1) {
       for (let x = 0; x < CODE_GRID; x += 1) {
@@ -484,12 +457,46 @@
         if (!bit) continue;
         context.fillStyle = "#111111";
         context.fillRect(
-          Math.floor(x * moduleWidth),
-          Math.floor(y * moduleHeight),
+          left + Math.floor(x * moduleWidth),
+          top + Math.floor(y * moduleHeight),
           Math.ceil(moduleWidth),
           Math.ceil(moduleHeight)
         );
       }
+    }
+  }
+
+  // Draw one frame
+  function renderFrame(canvas, frame) {
+    const context = canvas.getContext("2d", { alpha: false });
+    context.imageSmoothingEnabled = false;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    drawFrame(context, frame, 0, 0, canvas.width, canvas.height);
+  }
+
+  // Draw several codes in one flash
+  function renderFrameGrid(canvas, frames) {
+    const context = canvas.getContext("2d", { alpha: false });
+    const list = frames.filter(Boolean).slice(0, 4);
+    const count = Math.max(1, list.length);
+    const columns = count === 1 ? 1 : 2;
+    const rows = count <= 2 ? 1 : 2;
+    const gap = Math.max(10, Math.round(Math.min(canvas.width, canvas.height) * 0.018));
+    const cellWidth = (canvas.width - gap * (columns + 1)) / columns;
+    const cellHeight = (canvas.height - gap * (rows + 1)) / rows;
+    const side = Math.floor(Math.min(cellWidth, cellHeight));
+
+    context.imageSmoothingEnabled = false;
+    context.fillStyle = "#e9e7e1";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let index = 0; index < list.length; index += 1) {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const left = Math.round(gap + column * (cellWidth + gap) + (cellWidth - side) / 2);
+      const top = Math.round(gap + row * (cellHeight + gap) + (cellHeight - side) / 2);
+      drawFrame(context, list[index], left, top, side, side);
     }
   }
 
@@ -553,54 +560,36 @@
       throw new Error("Not a JamScan frame");
     }
 
-    if (crc32(header.slice(0, 28)) !== readU32(header, 28)) {
-      throw new Error("Header CRC mismatch");
+    if (header[3] !== FRAME_TYPE.FOUNTAIN) throw new Error("Unsupported frame type");
+    if (crc32(header.slice(0, 32)) !== readU32(header, 32)) throw new Error("Header CRC mismatch");
+
+    const sequence = readU32(header, 4);
+    const total = readU32(header, 8);
+    const blockSize = header[12] | (header[13] << 8);
+    const packageLength = readU32(header, 16);
+    const streamId = readU32(header, 20);
+    const packageCRC = readU32(header, 24);
+    const expectedCRC = readU32(header, 28);
+
+    if (total < 1 || total > 1000000) throw new Error("Invalid block count");
+    if (blockSize < 1 || blockSize > MAX_PAYLOAD) throw new Error("Invalid block size");
+    if (packageLength < 1 || packageLength > MAX_SOURCE_SIZE + 2 * 1024 * 1024) {
+      throw new Error("Invalid package length");
     }
 
-    const type = header[3];
-    const index = readU24(header, 4);
-    const total = readU24(header, 7);
-    const length = header[10] | (header[11] << 8);
-    const streamId = readU32(header, 12);
-    const cycle = readU32(header, 16);
-    const sequence = readU32(header, 20);
-    const expectedCRC = readU32(header, 24);
-
-    if (![FRAME_TYPE.START, FRAME_TYPE.DATA, FRAME_TYPE.END].includes(type)) {
-      throw new Error("Invalid frame type");
-    }
-
-    if (total < 1 || length < 1 || length > MAX_PAYLOAD) {
-      throw new Error("Invalid frame header");
-    }
-
-    if (type === FRAME_TYPE.DATA && index >= total) {
-      throw new Error("Invalid data index");
-    }
-
-    const payloadBits = dataBits.slice(headerBitCount, headerBitCount + length * 8);
-    if (payloadBits.length < length * 8) throw new Error("Incomplete frame");
+    const payloadBits = dataBits.slice(headerBitCount, headerBitCount + blockSize * 8);
+    if (payloadBits.length < blockSize * 8) throw new Error("Incomplete frame");
 
     const payload = bitsToBytes(payloadBits);
     if (crc32(payload) !== expectedCRC) throw new Error("CRC mismatch");
 
-    let packageLength = null;
-    let packageCRC = null;
-    let blockSize = null;
-
-    if ((type === FRAME_TYPE.START || type === FRAME_TYPE.END) && payload.length >= 10) {
-      packageLength = readU32(payload, 0);
-      packageCRC = readU32(payload, 4);
-      blockSize = payload[8] | (payload[9] << 8);
-    }
-
     return {
-      type,
-      index,
+      type: FRAME_TYPE.FOUNTAIN,
+      index: sequence,
       total,
-      length,
+      length: blockSize,
       streamId,
-      cycle,
+      cycle: 0,
       sequence,
       payload,
       packageLength,
@@ -949,35 +938,59 @@
   }
 
   // Read camera image
-  function sampleFrameFromCanvas(canvas, hintCorners = null) {
+  function sampleFramesFromCanvas(canvas, hintCornerSets = [], maxFrames = 4) {
     const context = canvas.getContext("2d", { willReadFrequently: true });
     const image = context.getImageData(0, 0, canvas.width, canvas.height);
     const gray = makeGray(image);
+    const frames = [];
+    const keys = new Set();
+    let lastError = new Error("Code not found");
 
-    if (Array.isArray(hintCorners) && hintCorners.length === 4) {
-      try {
-        return sampleCandidate(gray, canvas.width, canvas.height, makeHintCandidate(hintCorners));
-      } catch {
-        // Search again below
+    const addFrame = frame => {
+      const key = `${frame.streamId}:${frame.sequence}`;
+      if (keys.has(key)) return;
+      keys.add(key);
+      frames.push(frame);
+    };
+
+    let hints = hintCornerSets;
+    if (Array.isArray(hints) && hints.length === 4 && hints.every(point => point && Number.isFinite(point.x))) {
+      hints = [hints];
+    }
+
+    if (Array.isArray(hints)) {
+      for (const corners of hints.slice(0, maxFrames)) {
+        if (!Array.isArray(corners) || corners.length !== 4) continue;
+        try {
+          addFrame(sampleCandidate(gray, canvas.width, canvas.height, makeHintCandidate(corners)));
+        } catch (error) {
+          lastError = error;
+        }
       }
     }
+
+    // Skip the full image search when every locked code decoded.
+    if (frames.length >= maxFrames) return frames;
 
     const threshold = getThreshold(gray);
     const candidates = findBorderCandidates(gray, canvas.width, canvas.height, threshold);
 
-    if (!candidates.length) throw new Error("Code not found");
-
-    let lastError = new Error("Frame damaged");
-
     for (const candidate of candidates) {
+      if (frames.length >= maxFrames) break;
       try {
-        return sampleCandidate(gray, canvas.width, canvas.height, candidate);
+        addFrame(sampleCandidate(gray, canvas.width, canvas.height, candidate));
       } catch (error) {
         lastError = error;
       }
     }
 
-    throw lastError;
+    if (!frames.length) throw lastError;
+    return frames;
+  }
+
+  // Read one code
+  function sampleFrameFromCanvas(canvas, hintCorners = null) {
+    return sampleFramesFromCanvas(canvas, hintCorners ? [hintCorners] : [], 1)[0];
   }
 
   window.JamScanCore = {
@@ -1000,8 +1013,11 @@
     buildPackage,
     parsePackage,
     createStream,
+    createFountainFrame,
     createCycleFrames,
     renderFrame,
-    sampleFrameFromCanvas
+    renderFrameGrid,
+    sampleFrameFromCanvas,
+    sampleFramesFromCanvas
   };
 })();

@@ -8,26 +8,25 @@
     packageBytes: null,
     packageMeta: null,
     stream: null,
-    frames: [],
-    frameIndex: 0,
-    cycle: 0,
+    sequence: 0,
     playing: false,
     animationId: null,
     lastFrameTime: 0,
     measuredFps: 0,
     measuredFrames: 0,
-    measuredStarted: 0
+    measuredStarted: 0,
+    wakeLock: null
   };
 
   const core = window.JamScanCore;
   const ui = window.JamScanUI;
 
-  // Elements
+  // Find element
   function element(id) {
     return document.getElementById(id);
   }
 
-  // Select mode
+  // Select content type
   function setMode(mode) {
     state.mode = mode;
     element("fileModeButton").classList.toggle("active", mode === "file");
@@ -60,9 +59,13 @@
     ui.setStatus("buildStatus", "Choose content, then build the package.");
   }
 
-  // Speed setting
+  // Stream settings
   function getDelay() {
     return Number(element("speedSelect").value);
+  }
+
+  function getCodesPerFlash() {
+    return Number(element("codeCountSelect").value);
   }
 
   function getEstimatedFps() {
@@ -71,60 +74,63 @@
     return 1000 / delay;
   }
 
-  // Start marker length
-  function getCycleOptions() {
-    const fps = Math.max(5, Math.min(120, getEstimatedFps()));
-    return {
-      startRepeats: Math.ceil(fps * 0.7),
-      endRepeats: Math.ceil(fps * 0.22),
-      dataRepeats: state.stream && state.stream.total <= 10 ? 2 : 1
-    };
+  // Current frames
+  function currentFrames() {
+    if (!state.stream) return [];
+
+    const count = getCodesPerFlash();
+    const frames = [];
+    for (let index = 0; index < count; index += 1) {
+      frames.push(core.createFountainFrame(state.stream, state.sequence + index));
+    }
+    return frames;
   }
 
   // Stream metrics
   function updateMetrics() {
-    const dataFrames = state.stream ? state.stream.total : 0;
-    const current = state.frames[state.frameIndex];
+    const blockCount = state.stream ? state.stream.total : 0;
+    const codes = getCodesPerFlash();
     const estimatedFps = getEstimatedFps();
+    const estimatedFrames = blockCount ? Math.ceil(blockCount * 1.35) : 0;
+    const codeRate = estimatedFps * codes;
 
-    element("metricFrames").textContent = dataFrames ? dataFrames.toLocaleString() : "-";
-    element("metricCurrent").textContent = current
-      ? current.type === core.FRAME_TYPE.DATA
-        ? `Data ${current.index + 1}`
-        : core.frameTypeLabel(current.type)
+    element("metricFrames").textContent = blockCount ? blockCount.toLocaleString() : "-";
+    element("metricCurrent").textContent = state.stream
+      ? codes === 1
+        ? String(state.sequence)
+        : `${state.sequence}-${state.sequence + codes - 1}`
       : "-";
     element("metricSize").textContent = state.packageBytes ? core.formatBytes(state.packageBytes.length) : "-";
-    element("metricTime").textContent = state.frames.length
-      ? core.formatDuration(state.frames.length / estimatedFps)
+    element("metricTime").textContent = estimatedFrames
+      ? core.formatDuration(estimatedFrames / Math.max(1, codeRate))
       : "-";
     element("metricRate").textContent = state.playing && state.measuredFps
-      ? `${state.measuredFps.toFixed(0)} fps`
+      ? `${Math.round(state.measuredFps * codes)} codes/s`
       : getDelay() <= 1
-        ? "Refresh limit"
-        : `${estimatedFps.toFixed(0)} fps`;
-    element("metricCycle").textContent = state.stream ? String(state.cycle + 1) : "-";
-    element("metricStart").textContent = state.frames.length
-      ? `${(getCycleOptions().startRepeats / estimatedFps).toFixed(1)} sec`
-      : "-";
+        ? `Up to refresh x ${codes}`
+        : `${Math.round(codeRate)} codes/s`;
+    element("metricCycle").textContent = state.stream ? "Continuous" : "-";
+    element("metricStart").textContent = state.stream ? "Any frame" : "-";
+    element("metricCodes").textContent = state.stream ? String(codes) : "-";
   }
 
-  // Current frame
-  function showFrame() {
-    if (!state.frames.length) return;
-
-    state.frameIndex = Math.max(0, Math.min(state.frameIndex, state.frames.length - 1));
-    core.renderFrame(element("streamCanvas"), state.frames[state.frameIndex]);
+  // Draw flash
+  function showFlash() {
+    if (!state.stream) return;
+    core.renderFrameGrid(element("streamCanvas"), currentFrames());
     updateMetrics();
   }
 
-  // New cycle
-  function loadCycle(cycle) {
-    state.cycle = cycle;
-    state.frames = core.createCycleFrames(state.stream, state.cycle, getCycleOptions());
-    state.frameIndex = 0;
+  // Wake lock
+  async function requestWakeLock() {
+    try {
+      state.wakeLock = await navigator.wakeLock?.request("screen");
+    } catch {
+      state.wakeLock = null;
+    }
   }
 
-  // Playback stop
+  // Stop playback
   function stopPlayback() {
     state.playing = false;
     element("playButton").textContent = "Play";
@@ -132,6 +138,8 @@
     if (state.animationId !== null) cancelAnimationFrame(state.animationId);
     state.animationId = null;
     state.lastFrameTime = 0;
+    state.wakeLock?.release?.().catch(() => undefined);
+    state.wakeLock = null;
     updateMetrics();
   }
 
@@ -144,13 +152,8 @@
 
     if (ready) {
       state.lastFrameTime = time;
-      state.frameIndex += 1;
-
-      if (state.frameIndex >= state.frames.length) {
-        loadCycle(state.cycle + 1);
-      }
-
-      showFrame();
+      state.sequence = (state.sequence + getCodesPerFlash()) >>> 0;
+      showFlash();
       state.measuredFrames += 1;
 
       if (!state.measuredStarted) state.measuredStarted = time;
@@ -169,7 +172,7 @@
 
   // Playback toggle
   function togglePlayback() {
-    if (!state.frames.length) return;
+    if (!state.stream) return;
 
     if (state.playing) {
       stopPlayback();
@@ -181,6 +184,7 @@
     state.measuredStarted = 0;
     state.measuredFps = 0;
     element("playButton").textContent = "Pause";
+    requestWakeLock();
     state.animationId = requestAnimationFrame(playbackStep);
   }
 
@@ -213,7 +217,7 @@
       state.packageBytes = built.bytes;
       state.packageMeta = built.meta;
       state.stream = core.createStream(built.bytes);
-      loadCycle(0);
+      state.sequence = 0;
 
       element("streamEmpty").classList.add("hidden");
       element("downloadButton").disabled = false;
@@ -222,11 +226,11 @@
       element("fullscreenButton").disabled = false;
 
       stopPlayback();
-      showFrame();
+      showFlash();
 
       ui.setStatus(
         "buildStatus",
-        `${core.kindLabel(built.meta.kind)} ready: ${built.meta.name} - ${core.formatBytes(payload.length)} - ${state.stream.total.toLocaleString()} data frames.`,
+        `${core.kindLabel(built.meta.kind)} ready: ${built.meta.name} - ${core.formatBytes(payload.length)} - ${state.stream.total.toLocaleString()} source blocks.`,
         "good"
       );
       ui.showToast("JamScan package ready");
@@ -249,9 +253,21 @@
     );
   }
 
-  // Page events
+  // Update stream settings
+  function streamSettingChanged() {
+    state.measuredFps = 0;
+    if (state.stream) showFlash();
+    updateMetrics();
+  }
+
+  // Start page
   function startPage() {
     ui.bindDropZone(element("sourceDrop"), element("sourceFile"), setSourceFile);
+
+    // Mobile code count
+    if (window.JamScanDevice?.layout === "mobile") {
+      element("codeCountSelect").value = "2";
+    }
 
     element("fileModeButton").addEventListener("click", () => setMode("file"));
     element("textModeButton").addEventListener("click", () => setMode("text"));
@@ -262,8 +278,8 @@
 
     element("restartButton").addEventListener("click", () => {
       if (!state.stream) return;
-      loadCycle(0);
-      showFrame();
+      state.sequence = 0;
+      showFlash();
     });
 
     element("fullscreenButton").addEventListener("click", async () => {
@@ -274,14 +290,8 @@
       }
     });
 
-    element("speedSelect").addEventListener("change", () => {
-      state.measuredFps = 0;
-      if (state.stream) {
-        loadCycle(state.cycle);
-        showFrame();
-      }
-      updateMetrics();
-    });
+    element("speedSelect").addEventListener("change", streamSettingChanged);
+    element("codeCountSelect").addEventListener("change", streamSettingChanged);
 
     updateMetrics();
     window.addEventListener("beforeunload", stopPlayback);

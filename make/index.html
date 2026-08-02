@@ -8,6 +8,7 @@
   <title>Make - JamScan</title>
   <link rel="stylesheet" href="../assets/css/styles.css">
   <script src="../assets/js/device.js" defer></script>
+  <script src="../assets/js/fountain.js" defer></script>
   <script src="../assets/js/core.js" defer></script>
   <script src="../assets/js/common.js" defer></script>
   <script src="../assets/js/make.js" defer></script>
@@ -89,11 +90,11 @@
       <article class="panel-card stream-card">
         <div class="panel-heading">
           <h2>Animated dot stream</h2>
-          <p>Show this square on one device and scan it from another.</p>
+          <p>Show this changing multi-code grid on one device and scan it from another.</p>
         </div>
 
         <div class="canvas-shell" id="canvasShell">
-          <canvas id="streamCanvas" width="640" height="640" aria-label="JamScan animated dot stream"></canvas>
+          <canvas id="streamCanvas" width="960" height="960" aria-label="JamScan animated multi-code stream"></canvas>
           <div class="canvas-empty" id="streamEmpty"><strong>No stream loaded</strong><span>Build a package to create frames.</span></div>
         </div>
 
@@ -103,25 +104,35 @@
           <button class="button" id="fullscreenButton" type="button" disabled>Fullscreen</button>
           <label class="speed-control">Speed
             <select id="speedSelect">
-              <option value="125">Reliable</option>
-              <option value="67" selected>Fast</option>
-              <option value="33">Very fast</option>
+              <option value="100">Reliable - 10 flashes/s</option>
+              <option value="50">Fast - 20 flashes/s</option>
+              <option value="42" selected>Recommended - 24 flashes/s</option>
+              <option value="33">Very fast - 30 flashes/s</option>
+              <option value="17">High refresh - 60 flashes/s</option>
               <option value="1">Display maximum</option>
+            </select>
+          </label>
+          <label class="speed-control">Codes per flash
+            <select id="codeCountSelect">
+              <option value="1">1 code</option>
+              <option value="2">2 codes</option>
+              <option value="4" selected>4 codes</option>
             </select>
           </label>
         </div>
 
         <div class="metric-grid stream-metrics">
-          <div class="metric"><span>Data frames</span><strong id="metricFrames">-</strong></div>
-          <div class="metric"><span>Current</span><strong id="metricCurrent">-</strong></div>
+          <div class="metric"><span>Source blocks</span><strong id="metricFrames">-</strong></div>
+          <div class="metric"><span>Sequence</span><strong id="metricCurrent">-</strong></div>
           <div class="metric"><span>Package size</span><strong id="metricSize">-</strong></div>
-          <div class="metric"><span>Loop time</span><strong id="metricTime">-</strong></div>
+          <div class="metric"><span>Estimated scan</span><strong id="metricTime">-</strong></div>
           <div class="metric"><span>Actual rate</span><strong id="metricRate">-</strong></div>
-          <div class="metric"><span>Cycle</span><strong id="metricCycle">-</strong></div>
-          <div class="metric"><span>Start marker</span><strong id="metricStart">-</strong></div>
+          <div class="metric"><span>Stream</span><strong id="metricCycle">-</strong></div>
+          <div class="metric"><span>Join point</span><strong id="metricStart">-</strong></div>
+          <div class="metric"><span>Codes per flash</span><strong id="metricCodes">-</strong></div>
         </div>
 
-        <div class="notice-box">Each loop holds the start marker long enough for a camera to lock, then sends the data. Display maximum advances once per screen refresh; it cannot create visible one-millisecond flashes on normal hardware. Reliable or Fast is recommended.</div>
+        <div class="notice-box">Each flash can contain four independently readable codes. The rateless repair stream repeats source information in new combinations, so missed camera frames do not require one exact frame to return. Recommended mode gives each flash about one screen refresh on common displays.</div>
       </article>
     </section>
   </main>
@@ -129,7 +140,7 @@
   <!-- Page footer -->
   <footer class="site-footer section-wrap">
     <span>JamScan open source project</span>
-    <span><a href="../README.md">README</a> and <a href="../LICENSE">MIT License</a></span>
+    <span><a href="../README.md">README</a>, <a href="../CREDITS.md">Credits</a>, and <a href="../LICENSE">MIT License</a></span>
   </footer>
 
   <div class="toast" id="toast" role="status"></div>

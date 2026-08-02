@@ -11,77 +11,85 @@
     loopGeneration: 0,
     running: false,
     busy: false,
-    waitingForStart: true,
     session: null,
     valid: 0,
     rejected: 0,
-    missedFlashes: 0,
-    ignoredBeforeStart: 0,
     duplicates: 0,
     lastDecodeMs: 0,
-    lastFrameKey: "",
     lastLockTime: 0,
-    lockCorners: null,
+    lockCorners: [],
     lockFailures: 0,
     cameraRate: 0,
-    complete: false
+    complete: false,
+    codesLast: 0,
+    sequenceHoles: new Set(),
+    largeGapCount: 0
   };
 
   const core = window.JamScanCore;
   const ui = window.JamScanUI;
   const viewer = window.JamScanViewer;
+  const FountainDecoder = window.JamScanFountain.Decoder;
 
-  // Elements
+  // Find element
   function element(id) {
     return document.getElementById(id);
   }
 
-  // Missing data
+  // Missing blocks
   function getMissingCount() {
     if (!state.session) return 0;
-    return Math.max(0, state.session.total - state.session.chunks.size);
+    return Math.max(0, state.session.total - state.session.decoder.solvedCount);
+  }
+
+  // Sequence gaps
+  function getGapCount() {
+    return state.sequenceHoles.size + state.largeGapCount;
   }
 
   // Progress display
   function updateScanUI() {
     const total = state.session ? state.session.total : 0;
-    const count = state.session ? state.session.chunks.size : 0;
-    const percent = total ? Math.round((count / total) * 100) : 0;
-    const missing = total ? getMissingCount() : 0;
+    const solved = state.session ? state.session.decoder.solvedCount : 0;
+    const collected = state.session ? state.session.decoder.framesNew : 0;
+    const estimatedCodes = total ? Math.ceil(total * 1.2) : 0;
+    const percent = state.complete
+      ? 100
+      : estimatedCodes
+        ? Math.min(99, Math.round((collected / estimatedCodes) * 100))
+        : 0;
 
     element("scanProgress").style.width = `${percent}%`;
     element("scanPercent").textContent = `${percent}%`;
-    element("scanFrameCount").textContent = `${count.toLocaleString()} / ${total.toLocaleString()} data frames`;
+    element("scanFrameCount").textContent = estimatedCodes
+      ? `${collected.toLocaleString()} / about ${estimatedCodes.toLocaleString()} codes`
+      : "0 / 0 codes";
     element("validFrames").textContent = state.valid.toLocaleString();
     element("badFrames").textContent = state.rejected.toLocaleString();
-    element("missedFlashes").textContent = state.missedFlashes.toLocaleString();
-    element("missingFrames").textContent = missing.toLocaleString();
-    element("decodeTime").textContent = state.lastDecodeMs ? `${state.lastDecodeMs.toFixed(2)} ms` : "-";
-    element("cycleCount").textContent = state.session ? state.session.cycles.toLocaleString() : "0";
-    element("cameraRate").textContent = state.cameraRate ? `${Math.round(state.cameraRate)} fps` : "-";
+    element("missedFlashes").textContent = getGapCount().toLocaleString();
+    element("missingFrames").textContent = getMissingCount().toLocaleString();
+    element("decodeTime").textContent = state.lastDecodeMs ? `${state.lastDecodeMs.toFixed(1)} ms` : "-";
+    element("cycleCount").textContent = String(state.codesLast);
+    element("cameraRate").textContent = state.cameraRate ? `${state.cameraRate.toFixed(0)} fps` : "-";
 
     if (state.complete) {
       element("scanState").textContent = "Complete";
-    } else if (state.waitingForStart) {
-      element("scanState").textContent = "Waiting for start";
+    } else if (!state.session) {
+      element("scanState").textContent = "Searching";
     } else {
       element("scanState").textContent = "Receiving";
     }
 
     if (!state.session) {
-      element("scanMessage").textContent = state.ignoredBeforeStart
-        ? "A stream was found. JamScan is waiting for the next start marker."
-        : "No stream started yet.";
-    } else if (state.waitingForStart && missing) {
-      element("scanMessage").textContent = `Cycle ended with ${missing.toLocaleString()} data frames still missing. Waiting for the next start marker.`;
-    } else if (missing) {
-      element("scanMessage").textContent = `Receiving stream ${state.session.streamId.toString(16).padStart(8, "0")}. ${missing.toLocaleString()} data frames remain.`;
+      element("scanMessage").textContent = "Point the camera at one or more JamScan codes.";
+    } else if (getMissingCount()) {
+      element("scanMessage").textContent = `Receiving stream ${state.session.streamId.toString(16).padStart(8, "0")}. Repair frames can replace missed flashes.`;
     } else {
-      element("scanMessage").textContent = "All data frames received. Verifying the package.";
+      element("scanMessage").textContent = "All source blocks recovered. Verifying the package.";
     }
   }
 
-  // New session
+  // New stream
   function createSession(frame) {
     return {
       streamId: frame.streamId,
@@ -89,136 +97,86 @@
       packageLength: frame.packageLength,
       packageCRC: frame.packageCRC,
       blockSize: frame.blockSize,
-      chunks: new Map(),
-      cycle: frame.cycle,
-      lastSequence: frame.sequence,
-      cycles: 1
+      decoder: new FountainDecoder(
+        frame.total,
+        frame.blockSize,
+        frame.streamId,
+        frame.packageLength
+      ),
+      maxSequence: null
     };
   }
 
-  // Sequence check
-  function trackSequence(frame) {
+  // Reset stream counters
+  function beginSession(frame) {
+    state.session = createSession(frame);
+    state.valid = 0;
+    state.duplicates = 0;
+    state.sequenceHoles.clear();
+    state.largeGapCount = 0;
+    state.complete = false;
+    element("scanPreviewHost").innerHTML = "";
+    element("scanBadge").textContent = "Stream locked";
+  }
+
+  // Track skipped sequence numbers
+  function trackSequence(sequence) {
     if (!state.session) return;
 
-    const last = state.session.lastSequence;
-    if (Number.isInteger(last) && frame.sequence > last + 1) {
-      state.missedFlashes += frame.sequence - last - 1;
+    if (state.session.maxSequence === null) {
+      state.session.maxSequence = sequence;
+      return;
     }
 
-    if (!Number.isInteger(last) || frame.sequence > last) {
-      state.session.lastSequence = frame.sequence;
-    }
-  }
+    if (state.sequenceHoles.delete(sequence)) return;
+    if (sequence <= state.session.maxSequence) return;
 
-  // Start marker
-  function processStart(frame) {
-    const isNewStream = !state.session || state.session.streamId !== frame.streamId;
-
-    if (isNewStream) {
-      state.session = createSession(frame);
-      state.valid = 0;
-      state.missedFlashes = 0;
-      state.duplicates = 0;
-    } else {
-      const metadataChanged =
-        state.session.total !== frame.total ||
-        state.session.packageLength !== frame.packageLength ||
-        state.session.packageCRC !== frame.packageCRC ||
-        state.session.blockSize !== frame.blockSize;
-
-      if (metadataChanged) {
-        state.rejected += 1;
-        element("scanBadge").textContent = "Stream metadata changed";
-        return;
+    const gap = sequence - state.session.maxSequence - 1;
+    if (gap > 0) {
+      const stored = Math.min(gap, 4096);
+      for (let value = state.session.maxSequence + 1; value <= state.session.maxSequence + stored; value += 1) {
+        state.sequenceHoles.add(value >>> 0);
       }
-
-      if (state.session.cycle !== frame.cycle) {
-        state.session.cycle = frame.cycle;
-        state.session.lastSequence = frame.sequence;
-        state.session.cycles += 1;
-      } else {
-        trackSequence(frame);
-      }
+      if (gap > stored) state.largeGapCount += gap - stored;
     }
 
-    state.waitingForStart = false;
-    element("scanBadge").textContent = "Start marker locked";
-    updateScanUI();
+    state.session.maxSequence = sequence;
   }
 
-  // Data frame
-  async function processData(frame) {
-    if (!state.session || state.waitingForStart || state.session.streamId !== frame.streamId) {
-      state.ignoredBeforeStart += 1;
-      state.waitingForStart = true;
-      element("scanBadge").textContent = "Stream found - waiting for start";
-      updateScanUI();
-      return;
-    }
-
-    if (frame.cycle !== state.session.cycle) {
-      state.waitingForStart = true;
-      state.ignoredBeforeStart += 1;
-      element("scanBadge").textContent = "New cycle found - waiting for start";
-      updateScanUI();
-      return;
-    }
-
-    trackSequence(frame);
-
-    if (state.session.chunks.has(frame.index)) {
-      state.duplicates += 1;
-      element("scanBadge").textContent = `Duplicate data frame ${frame.index + 1}`;
-      updateScanUI();
-      return;
-    }
-
-    state.session.chunks.set(frame.index, frame.payload);
-    state.valid += 1;
-    element("scanBadge").textContent = `Data frame ${frame.index + 1} received`;
-    updateScanUI();
-
-    if (state.session.chunks.size === state.session.total) {
-      await finishScan();
-    }
-  }
-
-  // End marker
-  async function processEnd(frame) {
-    if (!state.session || state.waitingForStart || state.session.streamId !== frame.streamId) return;
-    if (frame.cycle !== state.session.cycle) return;
-
-    trackSequence(frame);
-
-    if (state.session.chunks.size === state.session.total) {
-      await finishScan();
-      return;
-    }
-
-    state.waitingForStart = true;
-    element("scanBadge").textContent = `Cycle ended - ${getMissingCount()} data frames missing`;
-    updateScanUI();
-  }
-
-  // Receive frame
+  // Receive code
   async function processFrame(frame) {
-    const key = `${frame.streamId}:${frame.cycle}:${frame.sequence}`;
-    if (key === state.lastFrameKey) return;
-    state.lastFrameKey = key;
+    const newStream = !state.session || state.session.streamId !== frame.streamId;
+    if (newStream) beginSession(frame);
 
-    if (frame.type === core.FRAME_TYPE.START) {
-      processStart(frame);
+    const metadataChanged =
+      state.session.total !== frame.total ||
+      state.session.packageLength !== frame.packageLength ||
+      state.session.packageCRC !== frame.packageCRC ||
+      state.session.blockSize !== frame.blockSize;
+
+    if (metadataChanged) {
+      state.rejected += 1;
+      element("scanBadge").textContent = "Stream metadata changed";
+      updateScanUI();
       return;
     }
 
-    if (frame.type === core.FRAME_TYPE.DATA) {
-      await processData(frame);
+    trackSequence(frame.sequence);
+    const before = state.session.decoder.framesNew;
+    state.session.decoder.addFrame(frame.sequence, frame.payload);
+
+    if (state.session.decoder.framesNew === before) {
+      state.duplicates += 1;
+      element("scanBadge").textContent = `Duplicate code ${frame.sequence}`;
+      updateScanUI();
       return;
     }
 
-    if (frame.type === core.FRAME_TYPE.END) {
-      await processEnd(frame);
-    }
+    state.valid += 1;
+    element("scanBadge").textContent = `Code ${frame.sequence} received`;
+    updateScanUI();
+
+    if (state.session.decoder.isComplete) await finishScan();
   }
 
   // Finish package
@@ -229,30 +187,11 @@
     element("scanBadge").textContent = "Complete - verifying";
     updateScanUI();
 
-    const arrays = [];
-    for (let index = 0; index < state.session.total; index += 1) {
-      const part = state.session.chunks.get(index);
-      if (!part) {
-        state.complete = false;
-        return;
-      }
-      arrays.push(part);
-    }
-
     try {
-      let bytes = core.concatArrays(arrays);
-
-      if (state.session.packageLength && bytes.length >= state.session.packageLength) {
-        bytes = bytes.slice(0, state.session.packageLength);
-      }
-
-      if (bytes.length !== state.session.packageLength) {
-        throw new Error("Package length check failed.");
-      }
-
-      if (core.crc32(bytes) !== state.session.packageCRC) {
-        throw new Error("Package CRC check failed.");
-      }
+      const bytes = state.session.decoder.result();
+      if (!bytes) throw new Error("Fountain recovery did not finish.");
+      if (bytes.length !== state.session.packageLength) throw new Error("Package length check failed.");
+      if (core.crc32(bytes) !== state.session.packageCRC) throw new Error("Package CRC check failed.");
 
       const parsed = await core.parsePackage(bytes);
       stopScanLoop();
@@ -276,7 +215,7 @@
 
     if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) return false;
 
-    const scale = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+    const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
     const drawWidth = video.videoWidth * scale;
     const drawHeight = video.videoHeight * scale;
     const drawX = (canvas.width - drawWidth) / 2;
@@ -288,8 +227,8 @@
     return true;
   }
 
-  // Code outline
-  function drawLock(frame) {
+  // Code outlines
+  function drawLocks(frames) {
     const overlay = element("scanOverlay");
     const shell = overlay.parentElement;
     const ratio = Math.max(1, window.devicePixelRatio || 1);
@@ -303,29 +242,33 @@
 
     const context = overlay.getContext("2d");
     context.clearRect(0, 0, width, height);
-    if (!frame || !frame.corners) return;
+    if (!frames || !frames.length) return;
 
-    const scaleX = width / frame.sourceWidth;
-    const scaleY = height / frame.sourceHeight;
-    context.strokeStyle = "#f5b942";
-    context.lineWidth = Math.max(3, ratio * 2);
-    context.beginPath();
+    for (const frame of frames) {
+      if (!frame.corners) continue;
+      const scaleX = width / frame.sourceWidth;
+      const scaleY = height / frame.sourceHeight;
+      context.strokeStyle = "#f5b942";
+      context.lineWidth = Math.max(3, ratio * 2);
+      context.beginPath();
 
-    frame.corners.forEach((point, index) => {
-      const x = point.x * scaleX;
-      const y = point.y * scaleY;
-      if (index === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    });
+      frame.corners.forEach((point, index) => {
+        const x = point.x * scaleX;
+        const y = point.y * scaleY;
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
 
-    context.closePath();
-    context.stroke();
+      context.closePath();
+      context.stroke();
+    }
+
     state.lastLockTime = performance.now();
   }
 
-  // Clear outline
-  function clearOldLock() {
-    if (performance.now() - state.lastLockTime < 300) return;
+  // Clear old outlines
+  function clearOldLocks() {
+    if (performance.now() - state.lastLockTime < 250) return;
     const overlay = element("scanOverlay");
     overlay.getContext("2d").clearRect(0, 0, overlay.width, overlay.height);
   }
@@ -338,27 +281,33 @@
     try {
       if (drawCameraImage()) {
         const started = performance.now();
-        const frame = core.sampleFrameFromCanvas(element("sampleCanvas"), state.lockCorners);
+        const frames = core.sampleFramesFromCanvas(element("sampleCanvas"), state.lockCorners, 4);
         state.lastDecodeMs = performance.now() - started;
-        state.lockCorners = frame.corners;
+        state.lockCorners = frames.map(frame => frame.corners);
         state.lockFailures = 0;
-        drawLock(frame);
-        await processFrame(frame);
+        state.codesLast = frames.length;
+        drawLocks(frames);
+
+        for (const frame of frames) {
+          await processFrame(frame);
+          if (state.complete) break;
+        }
       }
     } catch (error) {
       state.lockFailures += 1;
-      if (state.lockFailures >= 3) state.lockCorners = null;
-      clearOldLock();
+      state.codesLast = 0;
+      if (state.lockFailures >= 3) state.lockCorners = [];
+      clearOldLocks();
 
       if (["CRC mismatch", "Header CRC mismatch", "Frame damaged"].includes(error.message)) {
         state.rejected += 1;
-        element("scanBadge").textContent = "Damaged flash skipped";
+        element("scanBadge").textContent = "Damaged code skipped";
       } else if (error.message === "Low contrast") {
         element("scanBadge").textContent = "Increase screen brightness";
       } else if (error.message === "Code not found") {
-        element("scanBadge").textContent = state.waitingForStart ? "Find the square" : "Keep the square in view";
+        element("scanBadge").textContent = "Keep all codes in view";
       } else {
-        element("scanBadge").textContent = state.waitingForStart ? "Looking for start marker" : "Looking for frames";
+        element("scanBadge").textContent = "Looking for JamScan codes";
       }
 
       updateScanUI();
@@ -390,7 +339,7 @@
     }
   }
 
-  // Scan loop
+  // Start scan loop
   function startScanLoop() {
     stopScanLoop();
     state.running = true;
@@ -398,6 +347,7 @@
     scheduleScan(state.loopGeneration);
   }
 
+  // Stop scan loop
   function stopScanLoop() {
     const video = element("cameraVideo");
     state.running = false;
@@ -407,10 +357,7 @@
       video.cancelVideoFrameCallback(state.loopId);
     }
 
-    if (state.loopMode === "animation" && state.loopId !== null) {
-      cancelAnimationFrame(state.loopId);
-    }
-
+    if (state.loopMode === "animation" && state.loopId !== null) cancelAnimationFrame(state.loopId);
     state.loopId = null;
     state.loopMode = null;
   }
@@ -426,29 +373,26 @@
   async function requestCamera(deviceId) {
     if (deviceId) {
       return navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 60, min: 24 }
+        },
         audio: false
       });
     }
 
+    const base = {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    };
+
     const attempts = [
-      {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { exact: 60 }
-      },
-      {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 60, min: 24 }
-      },
-      {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
+      { ...base, frameRate: { exact: 60 } },
+      { ...base, frameRate: { ideal: 60, min: 24 } },
+      base
     ];
 
     let lastError;
@@ -494,7 +438,7 @@
 
     element("cameraPlaceholder").classList.add("hidden");
     element("cameraButton").textContent = "Stop camera";
-    element("scanBadge").textContent = "Find the JamScan square";
+    element("scanBadge").textContent = "Find the JamScan codes";
 
     await loadCameras();
     updateScanUI();
@@ -513,27 +457,26 @@
     element("cameraPlaceholder").classList.remove("hidden");
     element("cameraButton").textContent = "Start camera";
     element("scanBadge").textContent = "Ready to scan";
-    drawLock(null);
+    drawLocks([]);
     updateScanUI();
   }
 
   // Reset scan
   function resetScan() {
-    state.waitingForStart = true;
     state.session = null;
     state.valid = 0;
     state.rejected = 0;
-    state.missedFlashes = 0;
-    state.ignoredBeforeStart = 0;
     state.duplicates = 0;
     state.lastDecodeMs = 0;
-    state.lastFrameKey = "";
-    state.lockCorners = null;
+    state.lockCorners = [];
     state.lockFailures = 0;
     state.complete = false;
+    state.codesLast = 0;
+    state.sequenceHoles.clear();
+    state.largeGapCount = 0;
     element("scanPreviewHost").innerHTML = "";
     updateScanUI();
-    element("scanBadge").textContent = state.stream ? "Find the JamScan square" : "Ready to scan";
+    element("scanBadge").textContent = state.stream ? "Find the JamScan codes" : "Ready to scan";
 
     if (state.stream && !state.running) startScanLoop();
   }
@@ -555,17 +498,19 @@
     bitmap.close();
 
     const started = performance.now();
-    const frame = core.sampleFrameFromCanvas(canvas, state.lockCorners);
+    const frames = core.sampleFramesFromCanvas(canvas, state.lockCorners, 4);
     state.lastDecodeMs = performance.now() - started;
-    state.lockCorners = frame.corners;
+    state.lockCorners = frames.map(frame => frame.corners);
     state.lockFailures = 0;
-    drawLock(frame);
-    await processFrame(frame);
+    state.codesLast = frames.length;
+    drawLocks(frames);
+
+    for (const frame of frames) await processFrame(frame);
     updateScanUI();
-    ui.showToast(`${core.frameTypeLabel(frame.type)} frame read`);
+    ui.showToast(`${frames.length} code${frames.length === 1 ? "" : "s"} read`);
   }
 
-  // Page events
+  // Start page
   function startPage() {
     element("cameraButton").addEventListener("click", async () => {
       if (state.stream) {
@@ -583,7 +528,6 @@
 
     element("switchCameraButton").addEventListener("click", async () => {
       if (!state.cameras.length) return;
-
       state.cameraIndex = (state.cameraIndex + 1) % state.cameras.length;
 
       try {

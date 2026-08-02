@@ -1,7 +1,25 @@
 # Third-party notices
 
-The current JamScan browser runtime does not include third-party JavaScript libraries, fonts, images, audio, or video assets.
+## Decimen Optical Transfer
 
-JamScan uses standard browser APIs and independently written project code.
+JamScan's multi-code optical mode is inspired by Decimen Optical Transfer by BashAlarmist. The LT fountain encoder and peeling decoder in `assets/js/fountain.js` contain adapted MIT-licensed logic from Decimen.
 
-If third-party material is added later, list its name, source, copyright notice, and license in this file before release.
+Source:
+
+https://github.com/bashalarmistalt/decimen-optical-transfer/
+
+License:
+
+MIT License, Copyright (c) 2026 BashAlarmist
+
+The complete notice is preserved in:
+
+```text
+licenses/DECIMEN-MIT.txt
+```
+
+JamScan does not claim endorsement by or affiliation with BashAlarmist or the Decimen project.
+
+## Browser runtime
+
+JamScan does not load a third-party JavaScript package, font, image, audio file, or video file at runtime. It uses browser APIs and project files included in this repository.
